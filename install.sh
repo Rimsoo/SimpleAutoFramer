@@ -9,12 +9,12 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "Installing dependencies..."
-sudo apt install -y build-essential cmake libopencv-dev libgtkmm-3.0-dev libayatana-appindicator3-dev libtbbmalloc2 libgtk-3-dev v4l2loopback-dkms libboost-all-dev || { echo "Error while installing dependencies"; exit 1; }
+apt update || { echo "Error while updating the package list"; exit 1; }
+apt install build-essential cmake libopencv-dev libgtkmm-3.0-dev libayatana-appindicator3-dev libtbbmalloc2 libgtk-3-dev v4l2loopback-dkms libboost-all-dev || { echo "Error while installing dependencies"; exit 1; }
 
 # Load the v4l2loopback module
-sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="AutoFrameCam"
-sudo usermod -aG video $USER
-newgrp video
+modprobe v4l2loopback devices=1 video_nr=20 card_label="AutoFrameCam"
+usermod -aG video $USER
 
 # Create build directory if it doesn't exist
 if [ ! -d "build" ]; then
@@ -31,11 +31,12 @@ echo "Compiling project..."
 make || { echo "Error while compiling the project"; exit 1; }
 
 echo "Installing project..."
-sudo make install || { echo "Error while installing the project"; exit 1; }
+make install || { echo "Error while installing the project"; exit 1; }
 
 cd ..
 
 # Lancer l'exécutable installé
 echo "Running the program..."
+# newgrp video
 /usr/local/bin/simpleautoframer || { echo "Error while running the program"; exit 1; }
 

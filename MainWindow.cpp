@@ -101,7 +101,12 @@ void MainWindow::update_frame(const cv::Mat& frame) {
         Gdk::COLORSPACE_RGB, false, 8,
         rgb_frame.cols, rgb_frame.rows);
     memcpy(pb->get_pixels(), rgb_frame.data, rgb_frame.total() * rgb_frame.elemSize());
-    
+    // TODO
+    // Créer un Gdk::Pixbuf avec allocation mémoire indépendante mais redimensionné avec la taille de la fenêtre m_video_image
+    // auto pb = Gdk::Pixbuf::create_from_data(
+    //     rgb_frame.data, Gdk::COLORSPACE_RGB, false, 8,
+    //     rgb_frame.cols, rgb_frame.rows, rgb_frame.step);
+    // pb = pb->scale_simple(m_video_image->get_allocated_width(), m_video_image->get_allocated_height(), Gdk::INTERP_BILINEAR);    
 
     // Mettre à jour l'image dans l'interface
     if (m_video_image) {

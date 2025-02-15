@@ -40,7 +40,11 @@ bool file_exists(const std::string& filename) {
 // --- AppIndicator ---
 // Configuration de l'indicateur système
 void setup_app_indicator(MainWindow* main_window) {
-    std::string icon_path = fs::absolute("icon.png").string();
+    #ifdef INSTALL_DATA_DIR
+        std::string icon_path = std::string(INSTALL_DATA_DIR) + "/icon.png";
+    #else
+        std::string icon_path = fs::absolute("icon.png").string();
+    #endif
     if (!fs::exists(icon_path)) {
         std::cerr << "Fichier icône non trouvé : " << icon_path << std::endl;
     }
@@ -74,7 +78,12 @@ int main(int argc, char *argv[]) {
     // Charger l'interface depuis Glade
     auto refBuilder = Gtk::Builder::create();
     try {
-        refBuilder->add_from_file("main_window.glade");
+    #ifdef INSTALL_DATA_DIR
+        std::string glade_path = std::string(INSTALL_DATA_DIR) + "/main_window.glade";
+    #else
+        std::string glade_path = fs::absolute("main_window.glade").string();
+    #endif
+        refBuilder->add_from_file(glade_path);
     } catch (const Glib::Error& ex) {
         std::cerr << "Erreur lors du chargement de l'interface : " << ex.what() << std::endl;
         return 1;
@@ -100,8 +109,14 @@ int main(int argc, char *argv[]) {
     }
 
     // Charger le classificateur Haarcascade pour la détection faciale
+
+    #ifdef INSTALL_DATA_DIR
+        std::string cascade_path = std::string(INSTALL_DATA_DIR) + "/haarcascade_frontalface_default.xml";
+    #else
+        std::string cascade_path = fs::absolute("haarcascade_frontalface_default.xml").string();
+    #endif
     cv::CascadeClassifier face_cascade;
-    if (!face_cascade.load("haarcascade_frontalface_default.xml")) {
+    if (!face_cascade.load(cascade_path)) {
         std::cerr << "Erreur : Impossible de charger le modèle de détection faciale." << std::endl;
         return -1;
     }

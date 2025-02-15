@@ -31,5 +31,11 @@ install(TARGETS simpleautoframer
         RUNTIME DESTINATION bin)
 
 # Installer les fichiers de ressources (modèle, icône, etc.) dans share/simpleautoframer
-install(FILES haarcascade_frontalface_default.xml icon.png
+install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade
         DESTINATION share/simpleautoframer)
+
+# Définir le répertoire d'installation des données
+set(INSTALL_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/simpleautoframer")
+
+# Transmettre cette information au code via une définition de compilation
+target_compile_definitions(simpleautoframer PRIVATE INSTALL_DATA_DIR="${INSTALL_DATA_DIR}")
