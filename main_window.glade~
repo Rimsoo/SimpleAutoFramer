@@ -14,7 +14,8 @@
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <property name="orientation">vertical</property>
-        <property name="position">430</property>
+        <property name="position">370</property>
+        <property name="position-set">True</property>
         <property name="wide-handle">True</property>
         <child>
           <object class="GtkFrame">

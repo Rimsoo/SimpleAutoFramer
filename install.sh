@@ -25,18 +25,21 @@ fi
 cd build
 
 echo "Configuring project..."
-cmake .. || { echo "Error while configuring the project"; exit 1; }
+cmake .. -DINSTALL_MODE=ON || { echo "Error while configuring the project"; exit 1; }
 
 echo "Compiling project..."
 make || { echo "Error while compiling the project"; exit 1; }
 
 echo "Installing project..."
 make install || { echo "Error while installing the project"; exit 1; }
+chmod +x /usr/share/applications/simpleautoframer.Desktop
 
 cd ..
+
+# Delete the build directory
+rm -rf build
 
 # Lancer l'exécutable installé
 echo "Running the program..."
 # newgrp video
 /usr/local/bin/simpleautoframer || { echo "Error while running the program"; exit 1; }
-

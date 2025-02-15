@@ -24,18 +24,29 @@ target_link_libraries(simpleautoframer PRIVATE ${OpenCV_LIBS} ${GTKMM_LIBRARIES}
 file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY icon.png DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY main_window.glade DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY simpleautoframer.Desktop DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Installation ---
 # Installer l'exécutable dans le répertoire bin
 install(TARGETS simpleautoframer
         RUNTIME DESTINATION bin)
 
-# Installer les fichiers de ressources (modèle, icône, etc.) dans share/simpleautoframer
+# Installer les fichiers de ressources (modèle, icône, interface Glade) dans share/simpleautoframer
 install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade
         DESTINATION share/simpleautoframer)
 
-# Définir le répertoire d'installation des données
-set(INSTALL_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/simpleautoframer")
+# Installer le fichier .desktop dans /usr/share/applications
+# install(FILES simpleautoframer.Desktop
+#         DESTINATION /usr/share/applications)
+# Installer le fichier .icon dans /usr/share/icons/simpleautoframer/simpleautoframer.png
+# install(FILES icon.png simpleautoframer.Desktop
+#         DESTINATION /usr/share/simpleautoframer/simpleautoframer.png)
 
-# Transmettre cette information au code via une définition de compilation
-target_compile_definitions(simpleautoframer PRIVATE INSTALL_DATA_DIR="${INSTALL_DATA_DIR}")
+configure_file(config.h.in config.h @ONLY)
+include_directories(${CMAKE_BINARY_DIR})
+
+option(INSTALL_MODE "Enable install mode" OFF)
+
+if(INSTALL_MODE)
+    add_compile_definitions(INSTALL_MODE)
+endif()

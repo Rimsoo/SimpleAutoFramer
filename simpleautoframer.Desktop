@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=SimpleAutoFramer
+Comment=A simple tool for automatic head tracking and framing
+Exec=simpleautoframer
+Icon=simpleautoframer
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;Graphics;Scanning;
+Keywords=auto;framing;head;tracking;tool;simple;

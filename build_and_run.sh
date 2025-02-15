@@ -25,5 +25,7 @@ cp ../haarcascade_frontalface_default.xml . || { echo "Erreur lors de la copie d
 echo "Lancement du programme..."
 ./simpleautoframer || { echo "Erreur lors de l'exécution du programme"; exit 1; }
 
+make clean
+
 # Revenir à la racine du projet
 cd ..

@@ -5,18 +5,6 @@
 #include <cstring>
 #include <atomic>
 
-// Déclarations des variables atomiques
-extern std::atomic<double> smoothing_factor;
-extern std::atomic<double> detection_confidence;
-extern std::atomic<int> model_selection;
-extern std::atomic<double> zoom_base;
-extern std::atomic<double> zoom_multiplier;
-extern std::atomic<int> target_width;
-extern std::atomic<int> target_height;
-
-extern std::atomic<cv::Point2f> last_center;
-extern std::atomic<double> last_zoom;
-
 MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>& builder)
     : Gtk::Window(cobject) {
     // Récupérer les widgets
@@ -42,7 +30,12 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     setup_adjustments();
     setup_model_selection();
 
-    // Connecter le signal "clicked" du bouton "Appliquer"
+    m_width_spin->set_value(target_width.load());
+    m_height_spin->set_value(target_height.load());
+
+    // Connecter le signal "clicked" du bouton "Appliquer" 
+    // pour fermer et  re-ouvrir la caméra virtuelle SI les dimensions ont changer, 
+    // juste après lappel de la méthode on_apply_clicked
     m_apply_button->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_apply_clicked));
 
     // Afficher tous les widgets
@@ -122,6 +115,12 @@ void MainWindow::on_apply_clicked() {
     smoothing_factor.store(m_smoothing_scale->get_value());
     detection_confidence.store(m_confidence_scale->get_value());
     zoom_multiplier.store(m_zoom_multiplier_scale->get_value());
+
+    // TODO soit recharger la caméra virtuelle ici
+    // soit renvoyer les valeurs pour les recharger dans main.cpp si possible
+    bool is_size_changed = target_width.load() != static_cast<int>(m_width_spin->get_value()) ||
+            target_height.load() != static_cast<int>(m_height_spin->get_value());
+    
     target_width.store(static_cast<int>(m_width_spin->get_value()));
     target_height.store(static_cast<int>(m_height_spin->get_value()));
 
@@ -135,6 +134,11 @@ void MainWindow::on_apply_clicked() {
         }
     } else {
         std::cerr << "Erreur : m_model_selection_combo n'est pas initialisé." << std::endl;
+    }
+
+    // Emit signal if size has changed
+    if (is_size_changed) {
+        signal_apply_clicked.emit();
     }
 
     // Afficher les paramètres appliqués

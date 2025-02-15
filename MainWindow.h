@@ -3,12 +3,26 @@
 
 #include <gtkmm.h>
 #include <opencv2/opencv.hpp>
-#include <atomic>
+
+// Déclarations des variables atomiques
+extern std::atomic<double> smoothing_factor;
+extern std::atomic<double> detection_confidence;
+extern std::atomic<int> model_selection;
+extern std::atomic<double> zoom_base;
+extern std::atomic<double> zoom_multiplier;
+extern std::atomic<int> target_width;
+extern std::atomic<int> target_height;
+
+extern std::atomic<cv::Point2f> last_center;
+extern std::atomic<double> last_zoom;
 
 class MainWindow : public Gtk::Window {
+    
 public:
     MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>& builder);
     virtual ~MainWindow() = default;
+
+    sigc::signal<void> signal_apply_clicked;
 
     void update_frame(const cv::Mat& frame);
 

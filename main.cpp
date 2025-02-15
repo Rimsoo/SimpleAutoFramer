@@ -10,8 +10,14 @@
 #include "MainWindow.h"
 #include "V4l2Output.h"
 #include "V4l2Device.h"
+#include <config.h>
+
+#define CAM_WIDTH 720
+#define CAM_HEIGHT 480
 
 namespace fs = std::filesystem;
+
+V4l2Output* videoOutput = nullptr;
 
 // Paramètres configurables (atomiques pour la synchronisation entre threads)
 std::atomic<double> smoothing_factor(0.1);   
@@ -19,12 +25,30 @@ std::atomic<double> detection_confidence(0.3);
 std::atomic<int> model_selection(0);           
 std::atomic<double> zoom_base(1.5);            
 std::atomic<double> zoom_multiplier(0.0);      
-std::atomic<int> target_width(1080);           
-std::atomic<int> target_height(720);           
+std::atomic<int> target_width(CAM_WIDTH);           
+std::atomic<int> target_height(CAM_HEIGHT);           
 
 // Variables d'état
-cv::Point2f last_center(0.5f, 0.5f); // Centre normalisé
+std::atomic<cv::Point2f> last_center({0.5f, 0.5f}); // Centre normalisé
 std::atomic<double> last_zoom(1.5);    // Dernier niveau de zoom
+
+// Function declaration
+void open_virtual_camera() 
+{
+    // Close the previous camera if it exists, 
+    // check if the object is memory allocated and opened
+    delete videoOutput;
+    double fps = 30.0;
+    const char* outputFile = "/dev/video20";
+     // --- Configuration du périphérique virtuel ---
+    V4L2DeviceParameters param(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
+    CAM_WIDTH, CAM_HEIGHT, fps, IOTYPE_MMAP);
+    videoOutput = V4l2Output::create(param);
+    if (!videoOutput) {
+        std::cerr << "Erreur : Impossible d'ouvrir la sortie " << outputFile << std::endl;
+        return;
+    }
+}
 
 // Lissage d'une valeur
 template <typename T>
@@ -48,7 +72,7 @@ void setup_app_indicator(MainWindow* main_window) {
     if (!fs::exists(icon_path)) {
         std::cerr << "Fichier icône non trouvé : " << icon_path << std::endl;
     }
-    AppIndicator *indicator = app_indicator_new("auto_framer", icon_path.c_str(), APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
+    AppIndicator *indicator = app_indicator_new("simple_auto_framer", icon_path.c_str(), APP_INDICATOR_CATEGORY_SYSTEM_SERVICES);
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
 
     GtkWidget *menu = gtk_menu_new();
@@ -64,6 +88,8 @@ void setup_app_indicator(MainWindow* main_window) {
     // Élément "Quit"
     GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
     g_signal_connect(menu_item_quit, "activate", G_CALLBACK(+[](GtkMenuItem*, gpointer){
+        delete videoOutput;
+        gtk_main_quit();
         exit(0);
     }), nullptr);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_quit);
@@ -101,6 +127,9 @@ int main(int argc, char *argv[]) {
     gtk_init(nullptr, nullptr);
     setup_app_indicator(main_window);
 
+    // Connect the signal from MainWindow to handle reopening the virtual camera
+    main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
+
     // Ouvrir la webcam (adapter l'index si besoin)
     cv::VideoCapture cap(1);
     if (!cap.isOpened()) {
@@ -125,17 +154,8 @@ int main(int argc, char *argv[]) {
     if (!fs::exists("/dev/video20"))
         std::cerr << "Attention : /dev/video20 n'existe pas. Vérifiez v4l2loopback." << std::endl;
 
-    double fps = 30.0;
-    const char* outputFile = "/dev/video20";
-
-    // --- Configuration du périphérique virtuel ---
-    V4L2DeviceParameters param(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
-                                 target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
-    V4l2Output* videoOutput = V4l2Output::create(param);
-    if (!videoOutput) {
-        std::cerr << "Erreur : Impossible d'ouvrir la sortie " << outputFile << std::endl;
-        return -1;
-    }
+    // Ouvrir la caméra virtuelle
+    open_virtual_camera();
 
     // Timeout pour traiter une image environ toutes les 33 ms (~30 fps)
     Glib::signal_timeout().connect([&]() -> bool {
@@ -174,8 +194,8 @@ int main(int argc, char *argv[]) {
         // Calcul de la région de recadrage
         int crop_width = static_cast<int>(frame.cols / last_zoom.load());
         int crop_height = static_cast<int>(frame.rows / last_zoom.load());
-        int center_x = static_cast<int>(last_center.x * frame.cols);
-        int center_y = static_cast<int>(last_center.y * frame.rows);
+        int center_x = static_cast<int>(last_center.load().x * frame.cols);
+        int center_y = static_cast<int>(last_center.load().y * frame.rows);
         int x1 = std::max(center_x - crop_width / 2, 0);
         int y1 = std::max(center_y - crop_height / 2, 0);
         int x2 = std::min(center_x + crop_width / 2, frame.cols);
@@ -198,9 +218,10 @@ int main(int argc, char *argv[]) {
 
         timeval timeout;
         bool isWritable = videoOutput->isWritable(&timeout);
-        if (isWritable) {
+        if (isWritable) 
+        {
             size_t nb = videoOutput->write(buffer, bufferSize);
-            if (nb != bufferSize)
+            if (nb != bufferSize) 
                 std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize << std::endl;
         }
 
