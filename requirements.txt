@@ -1,0 +1,6 @@
+PyGObject
+opencv-python
+numpy
+pyvirtualcam
+Pillow
+mediapipe

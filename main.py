@@ -19,14 +19,14 @@ class AutoFramerGUI(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Variables de configuration par défaut
-        self.smoothing_var = tk.DoubleVar(value=0.3)
-        self.confidence_var = tk.DoubleVar(value=0.8)
-        self.model_selection_var = tk.IntVar(value=1)
+        self.smoothing_var = tk.DoubleVar(value=0.1)
+        self.confidence_var = tk.DoubleVar(value=0.3)
+        self.model_selection_var = tk.IntVar(value=0)
         self.zoom_base_var = tk.DoubleVar(value=1.5)
-        self.zoom_multiplier_var = tk.DoubleVar(value=0.5)
+        self.zoom_multiplier_var = tk.DoubleVar(value=0.0)
         # Résolution par défaut (non carrée) pour garder le ratio de la caméra
-        self.width_var = tk.IntVar(value=720)
-        self.height_var = tk.IntVar(value=480)
+        self.width_var = tk.IntVar(value=1080)
+        self.height_var = tk.IntVar(value=720)
         # Preview scale : multiplicateur de la résolution cible pour la zone de prévisualisation
         self.preview_scale_var = tk.DoubleVar(value=0.5)
 
@@ -38,7 +38,7 @@ class AutoFramerGUI(tk.Tk):
         self.last_zoom = self.zoom_base_var.get()
 
         # Capture vidéo depuis la webcam
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(1)
 
         # Initialisation de la caméra virtuelle (sortie à la résolution cible)
         self.virt_cam = Camera(width=self.target_res[0], height=self.target_res[1], fps=30)

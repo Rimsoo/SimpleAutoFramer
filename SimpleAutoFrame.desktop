@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SimpleAutoFramer
+Exec=/opt/SimpleAutoFramer/SimpleAutoFramer
+Icon=/opt/SimpleAutoFramer/icon.png
+Type=Application
+Categories=Utility;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true
