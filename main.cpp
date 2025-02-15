@@ -2,9 +2,6 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <atomic>
-#include <vector>
-#include <algorithm>
-#include <thread>
 #include <cstdlib>
 #include <libayatana-appindicator/app-indicator.h>
 #include <gtk/gtk.h>
@@ -73,11 +70,27 @@ void setup_app_indicator(MainWindow* main_window) {
 
 int main(int argc, char *argv[]) {
     auto app = Gtk::Application::create(argc, argv, "org.auto_framer");
-    MainWindow main_window;
+
+    // Charger l'interface depuis Glade
+    auto refBuilder = Gtk::Builder::create();
+    try {
+        refBuilder->add_from_file("main_window.glade");
+    } catch (const Glib::Error& ex) {
+        std::cerr << "Erreur lors du chargement de l'interface : " << ex.what() << std::endl;
+        return 1;
+    }
+
+    // Créer la fenêtre principale
+    MainWindow* main_window = nullptr;
+    refBuilder->get_widget_derived("main_window", main_window);
+    if (!main_window) {
+        std::cerr << "Erreur : la fenêtre principale n'a pas été trouvée dans le fichier Glade." << std::endl;
+        return 1;
+    }
 
     // Initialiser GTK et l'AppIndicator
     gtk_init(nullptr, nullptr);
-    setup_app_indicator(&main_window);
+    setup_app_indicator(main_window);
 
     // Ouvrir la webcam (adapter l'index si besoin)
     cv::VideoCapture cap(1);
@@ -96,19 +109,19 @@ int main(int argc, char *argv[]) {
     // Vérifier l'existence du périphérique virtuel
     if (!fs::exists("/dev/video20"))
         std::cerr << "Attention : /dev/video20 n'existe pas. Vérifiez v4l2loopback." << std::endl;
-    
+
     double fps = 30.0;
     const char* outputFile = "/dev/video20";
 
-    // --- Configuration du périphérique virtuel --- 
-    // Ici, nous utilisons le format BGR4 pour envoyer des images en BGRA.
-    V4L2DeviceParameters param(outputFile, v4l2_fourcc('B', 'G', 'R', '4'), target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
+    // --- Configuration du périphérique virtuel ---
+    V4L2DeviceParameters param(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
+                                 target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
     V4l2Output* videoOutput = V4l2Output::create(param);
     if (!videoOutput) {
         std::cerr << "Erreur : Impossible d'ouvrir la sortie " << outputFile << std::endl;
         return -1;
     }
-    
+
     // Timeout pour traiter une image environ toutes les 33 ms (~30 fps)
     Glib::signal_timeout().connect([&]() -> bool {
         cv::Mat frame;
@@ -116,8 +129,8 @@ int main(int argc, char *argv[]) {
             std::cerr << "Erreur de capture vidéo." << std::endl;
             return true;
         }
-        
-        // Conversion en BGRA pour la détection (on peut également utiliser cette image pour l'affichage si souhaité)
+
+        // Conversion en BGRA pour la détection
         cv::Mat processedBGRA;
         cv::cvtColor(frame, processedBGRA, cv::COLOR_BGR2BGRA);
 
@@ -131,11 +144,16 @@ int main(int argc, char *argv[]) {
                 (face.x + face.width / 2.0f) / static_cast<float>(frame.cols),
                 (face.y + face.height / 2.0f) / static_cast<float>(frame.rows)
             );
-            last_center.x = smoothValue(current_center.x, last_center.x, smoothing_factor.load());
-            last_center.y = smoothValue(current_center.y, last_center.y, smoothing_factor.load());
+            // Charge, modifie et réécrit last_center (membre statique de MainWindow)
+            cv::Point2f old_center = last_center;
+            old_center.x = smoothValue(current_center.x, old_center.x, smoothing_factor.load());
+            old_center.y = smoothValue(current_center.y, old_center.y, smoothing_factor.load());
+            last_center = old_center;
+
             double face_size = std::max(face.width, face.height);
             double current_zoom = zoom_base.load() + (face_size / static_cast<double>(frame.cols)) * zoom_multiplier.load();
-            last_zoom.store(smoothValue(current_zoom, last_zoom.load(), smoothing_factor.load()));
+            double old_zoom = last_zoom.load();
+            last_zoom.store(smoothValue(current_zoom, old_zoom, smoothing_factor.load()));
         }
 
         // Calcul de la région de recadrage
@@ -156,14 +174,14 @@ int main(int argc, char *argv[]) {
         cv::Mat processedOutput;
         cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
 
-        // Mise à jour de l'IHM avec le flux traité (en affichant l'image traitée en BGR)
-        main_window.update_frame(processed);
+        // Mise à jour de l'IHM avec le flux traité
+        main_window->update_frame(processed);
 
         // Envoi de la frame vers la caméra virtuelle
         size_t bufferSize = processedOutput.total() * processedOutput.elemSize();
         char* buffer = reinterpret_cast<char*>(processedOutput.data);
 
-        timeval timeout; 
+        timeval timeout;
         bool isWritable = videoOutput->isWritable(&timeout);
         if (isWritable) {
             size_t nb = videoOutput->write(buffer, bufferSize);
@@ -173,11 +191,12 @@ int main(int argc, char *argv[]) {
 
         return true;
     }, 33);
-    
+
     app->hold();
-    int ret = app->run(main_window);
+    int ret = app->run(*main_window);
 
     // Libérer les ressources
     delete videoOutput;
+    delete main_window;
     return ret;
 }

@@ -1,39 +1,41 @@
 #!/bin/bash
 
-# Créer le dossier build s'il n'existe pas
+# Verifier le sudo
+if [ "$EUID" -ne 0 ]; then
+    cd ..
+    echo "This script requires administrator rights to install the program."
+    echo "Run: sudo ./install.sh"
+    exit 1
+fi
+
+echo "Installing dependencies..."
+sudo apt install -y build-essential cmake libopencv-dev libgtkmm-3.0-dev libayatana-appindicator3-dev libtbbmalloc2 libgtk-3-dev v4l2loopback-dkms libboost-all-dev || { echo "Error while installing dependencies"; exit 1; }
+
+# Load the v4l2loopback module
+sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="AutoFrameCam"
+sudo usermod -aG video $USER
+newgrp video
+
+# Create build directory if it doesn't exist
 if [ ! -d "build" ]; then
     echo "Création du dossier build..."
     mkdir build
 fi
 
-# Se déplacer dans le dossier build
 cd build
 
-# Configurer le projet avec CMake
-echo "Configuration du projet avec CMake..."
-cmake .. || { echo "Erreur lors de la configuration CMake"; exit 1; }
+echo "Configuring project..."
+cmake .. || { echo "Error while configuring the project"; exit 1; }
 
-# Compiler le projet
-echo "Compilation du projet..."
-make || { echo "Erreur lors de la compilation"; exit 1; }
+echo "Compiling project..."
+make || { echo "Error while compiling the project"; exit 1; }
 
-# Verifier le sudo
-if [ "$EUID" -ne 0 ]; then
-    cd ..
-    echo "Ce script nécessite les droits d'administrateur pour installer le programme."
-    echo "Veuillez lancer: cd build && sudo make install"
-    echo "Ou bien: sudo ./install.sh"
-    exit 1
-fi
+echo "Installing project..."
+sudo make install || { echo "Error while installing the project"; exit 1; }
 
-# Installer le projet (nécessite les droits d'écriture sur /usr/local par défaut)
-echo "Installation du projet..."
-sudo make install || { echo "Erreur lors de l'installation"; exit 1; }
-
-# Revenir à la racine du projet
 cd ..
 
 # Lancer l'exécutable installé
-echo "Lancement du programme..."
-/usr/local/bin/simpleautoframer || { echo "Erreur lors de l'exécution du programme"; exit 1; }
+echo "Running the program..."
+/usr/local/bin/simpleautoframer || { echo "Error while running the program"; exit 1; }
 

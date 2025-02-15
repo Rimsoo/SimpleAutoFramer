@@ -23,6 +23,7 @@ target_link_libraries(simpleautoframer PRIVATE ${OpenCV_LIBS} ${GTKMM_LIBRARIES}
 # Copier les fichiers nécessaires dans le dossier de build
 file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY icon.png DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY main_window.glade DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Installation ---
 # Installer l'exécutable dans le répertoire bin

@@ -2,32 +2,31 @@
 
 ## Installation
 
-### Prérequis
+### Prerequisites
 
 - OpenCV
-- v4l2loopback
+- V4l2loopback
 - CMake
 - Make
+- Apindicator3
+- Gtk3
+- ...
+
+Check the [install.sh](install.sh) script for more details.  
 
 ### Instructions
 
 Tested on Ubuntu 24.04 Gnome only.
 
 ```bash
-sudo apt install v4l2loopback-dkms
-sudo modprobe v4l2loopback devices=1 video_nr=20 card_label="AutoFrameCam"
-
-sudo usermod -aG video $USER
-newgrp video
-
-git clone 
+git clone https://github.com/Rimsoo/SimpleAutoFramer.git
 cd SimpleAutoFrame
 chmod +x install.sh
 sudo ./install.sh
 simpleautoframe
 ```
 
-## Utilisation
+## Usage
 
 ```bash
 simpleautoframe
@@ -36,6 +35,6 @@ simpleautoframe
 ## TODO
 
 - [x] Installation script
-- [ ] XML UI
+- [x] XML UI
 - [ ] Parametrable model
 - [ ] GPU support
