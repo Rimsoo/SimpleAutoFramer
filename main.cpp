@@ -17,7 +17,14 @@
 
 namespace fs = std::filesystem;
 
+double fps = 30.0;
+const char* outputFile = "/dev/video20";
+// The virtual camera output
 V4l2Output* videoOutput = nullptr;
+V4L2DeviceParameters paramOut(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
+CAM_WIDTH, CAM_HEIGHT, fps, IOTYPE_MMAP);
+// Ouvrir la webcam (adapter l'index si besoin)
+cv::VideoCapture cap(1);
 
 // Paramètres configurables (atomiques pour la synchronisation entre threads)
 std::atomic<double> smoothing_factor(0.1);   
@@ -35,19 +42,35 @@ std::atomic<double> last_zoom(1.5);    // Dernier niveau de zoom
 // Function declaration
 void open_virtual_camera() 
 {
+    // Vérifier l'existence du périphérique virtuel
+    if (!fs::exists(outputFile))
+        std::cerr << "Attention : /dev/video20 n'existe pas. Vérifiez v4l2loopback." << std::endl;
     // Close the previous camera if it exists, 
     // check if the object is memory allocated and opened
+    if (videoOutput != nullptr) 
+        videoOutput->stop();
     delete videoOutput;
-    double fps = 30.0;
-    const char* outputFile = "/dev/video20";
-     // --- Configuration du périphérique virtuel ---
-    V4L2DeviceParameters param(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
-    CAM_WIDTH, CAM_HEIGHT, fps, IOTYPE_MMAP);
-    videoOutput = V4l2Output::create(param);
+    videoOutput = nullptr;
+    videoOutput = V4l2Output::create(paramOut);
     if (!videoOutput) {
         std::cerr << "Erreur : Impossible d'ouvrir la sortie " << outputFile << std::endl;
-        return;
+        exit(-1);
     }
+}
+
+void signal_handler(int signum) {
+    // Fermer proprement videoOutput ici
+    if (videoOutput) 
+    {
+        videoOutput->stop();
+        delete videoOutput;
+        videoOutput = nullptr;
+    }
+    if (cap.isOpened()) 
+    {
+        cap.release();
+    }
+    exit(signum);
 }
 
 // Lissage d'une valeur
@@ -88,7 +111,7 @@ void setup_app_indicator(MainWindow* main_window) {
     // Élément "Quit"
     GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
     g_signal_connect(menu_item_quit, "activate", G_CALLBACK(+[](GtkMenuItem*, gpointer){
-        delete videoOutput;
+        signal_handler(SIGINT);
         gtk_main_quit();
         exit(0);
     }), nullptr);
@@ -99,6 +122,7 @@ void setup_app_indicator(MainWindow* main_window) {
 }
 
 int main(int argc, char *argv[]) {
+    signal(SIGINT, signal_handler); 
     auto app = Gtk::Application::create(argc, argv, "org.auto_framer");
 
     // Charger l'interface depuis Glade
@@ -130,8 +154,6 @@ int main(int argc, char *argv[]) {
     // Connect the signal from MainWindow to handle reopening the virtual camera
     main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
 
-    // Ouvrir la webcam (adapter l'index si besoin)
-    cv::VideoCapture cap(1);
     if (!cap.isOpened()) {
         std::cerr << "Erreur : Impossible d'ouvrir la webcam." << std::endl;
         return -1;
@@ -149,10 +171,6 @@ int main(int argc, char *argv[]) {
         std::cerr << "Erreur : Impossible de charger le modèle de détection faciale." << std::endl;
         return -1;
     }
-
-    // Vérifier l'existence du périphérique virtuel
-    if (!fs::exists("/dev/video20"))
-        std::cerr << "Attention : /dev/video20 n'existe pas. Vérifiez v4l2loopback." << std::endl;
 
     // Ouvrir la caméra virtuelle
     open_virtual_camera();
@@ -209,9 +227,6 @@ int main(int argc, char *argv[]) {
         cv::Mat processedOutput;
         cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
 
-        // Mise à jour de l'IHM avec le flux traité
-        main_window->update_frame(processed);
-
         // Envoi de la frame vers la caméra virtuelle
         size_t bufferSize = processedOutput.total() * processedOutput.elemSize();
         char* buffer = reinterpret_cast<char*>(processedOutput.data);
@@ -223,6 +238,8 @@ int main(int argc, char *argv[]) {
             size_t nb = videoOutput->write(buffer, bufferSize);
             if (nb != bufferSize) 
                 std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize << std::endl;
+
+            main_window->update_frame(processedOutput);
         }
 
         return true;
