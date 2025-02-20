@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "gtkmm/frame.h"
 #include <gtkmm.h>
 #include <opencv2/opencv.hpp>
 
@@ -37,6 +38,7 @@ protected:
 
     // Widgets
     Gtk::Image* m_video_image;
+    Gtk::Frame* m_video_frame;
     Gtk::Scale* m_smoothing_scale;
     Gtk::Scale* m_zoom_scale;
     Gtk::Scale* m_zoom_multiplier_scale;

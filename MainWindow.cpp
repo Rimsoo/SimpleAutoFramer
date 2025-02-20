@@ -19,6 +19,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     builder->get_widget("target_width", m_width_spin);
     builder->get_widget("target_height", m_height_spin);
     builder->get_widget("model_selection", m_model_selection_combo);
+    builder->get_widget("video_frame", m_video_frame);
 
     // Vérifier que les widgets ont été correctement récupérés
     if (!m_video_image || !m_apply_button || !m_smoothing_scale || !m_zoom_scale ||
@@ -90,19 +91,15 @@ void MainWindow::update_frame(const cv::Mat& frame) {
         std::cerr << "Erreur : rgb_frame est vide !" << std::endl;
         return;
     }
-
-    // Créer un Gdk::Pixbuf avec allocation mémoire indépendante
-    auto pb = Gdk::Pixbuf::create(
-        Gdk::COLORSPACE_RGB, false, 8,
-        rgb_frame.cols, rgb_frame.rows);
-    memcpy(pb->get_pixels(), rgb_frame.data, rgb_frame.total() * rgb_frame.elemSize());
-    // TODO
     // Créer un Gdk::Pixbuf avec allocation mémoire indépendante mais redimensionné avec la taille de la fenêtre m_video_image
-    // auto pb = Gdk::Pixbuf::create_from_data(
-    //     rgb_frame.data, Gdk::COLORSPACE_RGB, false, 8,
-    //     rgb_frame.cols, rgb_frame.rows, rgb_frame.step);
-    // pb = pb->scale_simple(m_video_image->get_allocated_width(), m_video_image->get_allocated_height(), Gdk::INTERP_BILINEAR);    
-
+    auto pb = Gdk::Pixbuf::create_from_data(rgb_frame.data, Gdk::COLORSPACE_RGB, false, 8, rgb_frame.cols, rgb_frame.rows, rgb_frame.step);
+  
+    // Redimensionner l'image pour qu'elle s'adapte à la taille de la frame m_video_frame, mais en gardant le ratio de l'image
+    float ratio = std::min(static_cast<float>(m_video_frame->get_allocated_width()) / pb->get_width(),
+                           static_cast<float>(m_video_frame->get_allocated_height()) / pb->get_height());
+    pb = pb->scale_simple(pb->get_width() * ratio, pb->get_height() * ratio, Gdk::INTERP_BILINEAR);
+    
+    
     // Mettre à jour l'image dans l'interface
     if (m_video_image) {
         m_video_image->set(pb);
