@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include "gtk/gtk.h"
+#include "gtkmm/enums.h"
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <gdkmm/pixbuf.h>
@@ -139,14 +141,12 @@ void MainWindow::on_apply_clicked() {
     // Emit signal if size has changed
     if (is_size_changed) {
         signal_apply_clicked.emit();
+        m_width_spin->set_value(target_width.load());
+        m_height_spin->set_value(target_height.load());
     }
+}
 
-    // Afficher les paramètres appliqués
-    std::cout << "Paramètres appliqués :" << std::endl;
-    std::cout << "  - Zoom de base : " << zoom_base.load() << std::endl;
-    std::cout << "  - Facteur de lissage : " << smoothing_factor.load() << std::endl;
-    std::cout << "  - Confiance de détection : " << detection_confidence.load() << std::endl;
-    std::cout << "  - Multiplicateur de zoom : " << zoom_multiplier.load() << std::endl;
-    std::cout << "  - Résolution : " << target_width.load() << "x" << target_height.load() << std::endl;
-    std::cout << "  - Modèle sélectionné : " << model_selection.load() << std::endl;
+void MainWindow::show_message(Gtk::MessageType type, const std::string& msg) {
+    Gtk::MessageDialog dialog(*this, msg, false, type, Gtk::BUTTONS_OK);
+    dialog.run();
 }

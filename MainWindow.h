@@ -25,6 +25,7 @@ public:
     sigc::signal<void> signal_apply_clicked;
 
     void update_frame(const cv::Mat& frame);
+    void show_message(Gtk::MessageType type, const std::string& msg);
 
 protected:
     // Structure pour le modèle de ComboBox
@@ -55,7 +56,6 @@ protected:
     // Gestionnaires de signaux
     bool on_delete_event(GdkEventAny* any_event) override;
     void on_apply_clicked();
-
 };
 
 #endif // MAINWINDOW_H

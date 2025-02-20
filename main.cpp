@@ -6,23 +6,25 @@
 #include <libayatana-appindicator/app-indicator.h>
 #include <gtk/gtk.h>
 #include <filesystem>
+#include <string>
 #include <sys/stat.h>
 #include "MainWindow.h"
 #include "V4l2Output.h"
 #include "V4l2Device.h"
+#include "gtkmm/enums.h"
 #include <config.h>
 
-#define CAM_WIDTH 720
-#define CAM_HEIGHT 480
+#define CAM_WIDTH 1280
+#define CAM_HEIGHT 720
 
 namespace fs = std::filesystem;
+
+MainWindow* main_window = nullptr;
 
 double fps = 30.0;
 const char* outputFile = "/dev/video20";
 // The virtual camera output
 V4l2Output* videoOutput = nullptr;
-V4L2DeviceParameters paramOut(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
-CAM_WIDTH, CAM_HEIGHT, fps, IOTYPE_MMAP);
 // Ouvrir la webcam (adapter l'index si besoin)
 cv::VideoCapture cap(1);
 
@@ -44,17 +46,27 @@ void open_virtual_camera()
 {
     // Vérifier l'existence du périphérique virtuel
     if (!fs::exists(outputFile))
-        std::cerr << "Attention : /dev/video20 n'existe pas. Vérifiez v4l2loopback." << std::endl;
+        main_window->show_message(Gtk::MESSAGE_WARNING, ("Attention : "+std::string(outputFile)+ "n'existe pas. Vérifiez v4l2loopback.").c_str() );
     // Close the previous camera if it exists, 
     // check if the object is memory allocated and opened
     if (videoOutput != nullptr) 
         videoOutput->stop();
     delete videoOutput;
     videoOutput = nullptr;
+
+    V4L2DeviceParameters paramOut(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
+    target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
     videoOutput = V4l2Output::create(paramOut);
     if (!videoOutput) {
-        std::cerr << "Erreur : Impossible d'ouvrir la sortie " << outputFile << std::endl;
+        main_window->show_message(Gtk::MESSAGE_ERROR, ("Erreur : Impossible d'ouvrir la sortie " + std::string(outputFile)).c_str());
         exit(-1);
+    }
+
+    if(target_width.load() != videoOutput->getWidth() || target_height.load() != videoOutput->getHeight())
+    {
+        main_window->show_message(Gtk::MESSAGE_WARNING, "La résolution demandée n'a pas été appliquée.");
+        target_width.store(videoOutput->getWidth());
+        target_height.store(videoOutput->getHeight());
     }
 }
 
@@ -70,7 +82,7 @@ void signal_handler(int signum) {
     {
         cap.release();
     }
-    exit(signum);
+    exit(0);
 }
 
 // Lissage d'une valeur
@@ -86,14 +98,14 @@ bool file_exists(const std::string& filename) {
 
 // --- AppIndicator ---
 // Configuration de l'indicateur système
-void setup_app_indicator(MainWindow* main_window) {
+void setup_app_indicator() {
     #ifdef INSTALL_DATA_DIR
         std::string icon_path = std::string(INSTALL_DATA_DIR) + "/icon.png";
     #else
         std::string icon_path = fs::absolute("icon.png").string();
     #endif
     if (!fs::exists(icon_path)) {
-        std::cerr << "Fichier icône non trouvé : " << icon_path << std::endl;
+        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Fichier icône non trouvé.");
     }
     AppIndicator *indicator = app_indicator_new("simple_auto_framer", icon_path.c_str(), APP_INDICATOR_CATEGORY_SYSTEM_SERVICES);
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
@@ -140,7 +152,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Créer la fenêtre principale
-    MainWindow* main_window = nullptr;
     refBuilder->get_widget_derived("main_window", main_window);
     if (!main_window) {
         std::cerr << "Erreur : la fenêtre principale n'a pas été trouvée dans le fichier Glade." << std::endl;
@@ -149,13 +160,13 @@ int main(int argc, char *argv[]) {
 
     // Initialiser GTK et l'AppIndicator
     gtk_init(nullptr, nullptr);
-    setup_app_indicator(main_window);
+    setup_app_indicator();
 
     // Connect the signal from MainWindow to handle reopening the virtual camera
     main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
 
     if (!cap.isOpened()) {
-        std::cerr << "Erreur : Impossible d'ouvrir la webcam." << std::endl;
+        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible d'ouvrir la webcam.");
         return -1;
     }
 
@@ -168,7 +179,7 @@ int main(int argc, char *argv[]) {
     #endif
     cv::CascadeClassifier face_cascade;
     if (!face_cascade.load(cascade_path)) {
-        std::cerr << "Erreur : Impossible de charger le modèle de détection faciale." << std::endl;
+        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible de charger le modèle de détection faciale.");
         return -1;
     }
 
@@ -179,7 +190,7 @@ int main(int argc, char *argv[]) {
     Glib::signal_timeout().connect([&]() -> bool {
         cv::Mat frame;
         if (!cap.read(frame)) {
-            std::cerr << "Erreur de capture vidéo." << std::endl;
+            main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur de capture vidéo." );
             return true;
         }
 
@@ -198,10 +209,10 @@ int main(int argc, char *argv[]) {
                 (face.y + face.height / 2.0f) / static_cast<float>(frame.rows)
             );
             // Charge, modifie et réécrit last_center (membre statique de MainWindow)
-            cv::Point2f old_center = last_center;
+            cv::Point2f old_center = last_center.load();
             old_center.x = smoothValue(current_center.x, old_center.x, smoothing_factor.load());
             old_center.y = smoothValue(current_center.y, old_center.y, smoothing_factor.load());
-            last_center = old_center;
+            last_center.store(old_center);
 
             double face_size = std::max(face.width, face.height);
             double current_zoom = zoom_base.load() + (face_size / static_cast<double>(frame.cols)) * zoom_multiplier.load();
@@ -232,7 +243,7 @@ int main(int argc, char *argv[]) {
         char* buffer = reinterpret_cast<char*>(processedOutput.data);
 
         timeval timeout;
-        bool isWritable = videoOutput->isWritable(&timeout);
+        bool isWritable = true;//videoOutput->isWritable(&timeout);
         if (isWritable) 
         {
             size_t nb = videoOutput->write(buffer, bufferSize);
