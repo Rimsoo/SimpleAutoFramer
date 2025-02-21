@@ -1,5 +1,4 @@
 #include "MainWindow.h"
-#include "gtk/gtk.h"
 #include "gtkmm/enums.h"
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -19,7 +18,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     builder->get_widget("target_width", m_width_spin);
     builder->get_widget("target_height", m_height_spin);
     builder->get_widget("model_selection", m_model_selection_combo);
-    builder->get_widget("video_frame", m_video_frame);
+    builder->get_widget("main_panned", m_main_panned);
 
     // Vérifier que les widgets ont été correctement récupérés
     if (!m_video_image || !m_apply_button || !m_smoothing_scale || !m_zoom_scale ||
@@ -85,28 +84,57 @@ bool MainWindow::on_delete_event(GdkEventAny* any_event) {
 }
 
 void MainWindow::update_frame(const cv::Mat& frame) {
+    // if the window is not visible, do nothing
+    if (!is_visible()) {
+        return;
+    }
     cv::Mat rgb_frame;
     cv::cvtColor(frame, rgb_frame, cv::COLOR_BGR2RGB);
     if (rgb_frame.empty()) {
         std::cerr << "Erreur : rgb_frame est vide !" << std::endl;
         return;
     }
-    // Créer un Gdk::Pixbuf avec allocation mémoire indépendante mais redimensionné avec la taille de la fenêtre m_video_image
-    auto pb = Gdk::Pixbuf::create_from_data(rgb_frame.data, Gdk::COLORSPACE_RGB, false, 8, rgb_frame.cols, rgb_frame.rows, rgb_frame.step);
   
-    // Redimensionner l'image pour qu'elle s'adapte à la taille de la frame m_video_frame, mais en gardant le ratio de l'image
-    float ratio = std::min(static_cast<float>(m_video_frame->get_allocated_width()) / pb->get_width(),
-                           static_cast<float>(m_video_frame->get_allocated_height()) / pb->get_height());
-    pb = pb->scale_simple(pb->get_width() * ratio, pb->get_height() * ratio, Gdk::INTERP_BILINEAR);
+    // Créer le pixbuf original depuis les données OpenCV
+    auto pb_original = Gdk::Pixbuf::create_from_data(
+        rgb_frame.data,
+        Gdk::COLORSPACE_RGB,
+        false,
+        8,
+        rgb_frame.cols,
+        rgb_frame.rows,
+        rgb_frame.step
+    );
+  
+    // Utiliser get_allocation() pour obtenir la taille allouée réelle de la frame
+    int container_width = m_main_panned->get_position();
+    int container_height = m_main_panned->get_height();
+  
+    float ratio = static_cast<float>(pb_original->get_width()) / pb_original->get_height();
     
+    int new_width = pb_original->get_width();
+    int new_height = pb_original->get_height();
     
-    // Mettre à jour l'image dans l'interface
+    if(pb_original->get_width() > container_width || pb_original->get_height() > container_height) {
+        if (pb_original->get_width() > container_width) {
+            new_width = container_width;
+            new_height = static_cast<int>(container_width / ratio);
+        } else {
+            new_height = container_height;
+            new_width = static_cast<int>(container_height * ratio);
+            pb_original = pb_original->scale_simple(new_width, new_height, Gdk::INTERP_BILINEAR);
+        }
+    }
+  
+    auto pb_scaled = pb_original->scale_simple(new_width, new_height, Gdk::INTERP_BILINEAR);
+  
     if (m_video_image) {
-        m_video_image->set(pb);
+        m_video_image->set(pb_scaled);
     } else {
         std::cerr << "Erreur : m_video_image n'est pas initialisé." << std::endl;
     }
 }
+
 
 void MainWindow::on_apply_clicked() {
     // Récupérer les valeurs des ajustements
