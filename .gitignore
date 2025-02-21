@@ -8,3 +8,5 @@ Makefile
 build/
 .cache/
 .vscode/
+bvlc_*
+deploy.prototxt

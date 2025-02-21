@@ -8,7 +8,7 @@
 
 MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>& builder)
     : Gtk::Window(cobject) {
-    // Récupérer les widgets
+    // Récupérer les widgets depuis Glade
     builder->get_widget("video_image", m_video_image);
     builder->get_widget("apply_button", m_apply_button);
     builder->get_widget("smoothing_factor", m_smoothing_scale);
@@ -20,7 +20,6 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     builder->get_widget("model_selection", m_model_selection_combo);
     builder->get_widget("main_panned", m_main_panned);
 
-    // Vérifier que les widgets ont été correctement récupérés
     if (!m_video_image || !m_apply_button || !m_smoothing_scale || !m_zoom_scale ||
         !m_zoom_multiplier_scale || !m_confidence_scale || !m_width_spin ||
         !m_height_spin || !m_model_selection_combo) {
@@ -28,24 +27,17 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
         exit(1);
     }
 
-    // Configurer les ajustements et la ComboBox
     setup_adjustments();
     setup_model_selection();
 
     m_width_spin->set_value(target_width.load());
     m_height_spin->set_value(target_height.load());
 
-    // Connecter le signal "clicked" du bouton "Appliquer" 
-    // pour fermer et  re-ouvrir la caméra virtuelle SI les dimensions ont changer, 
-    // juste après lappel de la méthode on_apply_clicked
     m_apply_button->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_apply_clicked));
-
-    // Afficher tous les widgets
     show_all_children();
 }
 
 void MainWindow::setup_adjustments() {
-    // Configuration des ajustements pour les échelles
     auto setup_scale = [](Gtk::Scale* scale, double min, double max, double step, double value) {
         auto adj = scale->get_adjustment();
         adj->set_lower(min);
@@ -59,23 +51,23 @@ void MainWindow::setup_adjustments() {
     setup_scale(m_zoom_multiplier_scale, 0.0, 1.0, 0.01, 0.0);
     setup_scale(m_confidence_scale, 0.0, 1.0, 0.01, 0.3);
 
-    // Configuration des SpinButtons
     m_width_spin->get_adjustment()->configure(1080, 320, 3840, 1, 10, 0);
     m_height_spin->get_adjustment()->configure(720, 240, 2160, 1, 10, 0);
 }
 
 void MainWindow::setup_model_selection() {
-    // Création du modèle pour la ComboBox
     Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
     Gtk::TreeModel::Row row = *store->append();
-    row[m_columns.m_col_id] = "0";
+    row[m_columns.name] = "Haar Cascade (CPU)";
+    row[m_columns.id] = 0;
     row = *store->append();
-    row[m_columns.m_col_id] = "1";
+    row[m_columns.name] = "DNN (GPU)";
+    row[m_columns.id] = 1;
 
-    // Configuration de la ComboBox
     m_model_selection_combo->set_model(store);
-    m_model_selection_combo->pack_start(m_columns.m_col_id);
-    m_model_selection_combo->set_active(0);
+    m_model_selection_combo->pack_start(m_columns.name);
+
+    m_model_selection_combo->set_active(model_selection.load());
 }
 
 bool MainWindow::on_delete_event(GdkEventAny* any_event) {
@@ -84,10 +76,8 @@ bool MainWindow::on_delete_event(GdkEventAny* any_event) {
 }
 
 void MainWindow::update_frame(const cv::Mat& frame) {
-    // if the window is not visible, do nothing
-    if (!is_visible()) {
+    if (!is_visible())
         return;
-    }
     cv::Mat rgb_frame;
     cv::cvtColor(frame, rgb_frame, cv::COLOR_BGR2RGB);
     if (rgb_frame.empty()) {
@@ -95,7 +85,6 @@ void MainWindow::update_frame(const cv::Mat& frame) {
         return;
     }
   
-    // Créer le pixbuf original depuis les données OpenCV
     auto pb_original = Gdk::Pixbuf::create_from_data(
         rgb_frame.data,
         Gdk::COLORSPACE_RGB,
@@ -106,16 +95,14 @@ void MainWindow::update_frame(const cv::Mat& frame) {
         rgb_frame.step
     );
   
-    // Utiliser get_allocation() pour obtenir la taille allouée réelle de la frame
     int container_width = m_main_panned->get_position();
     int container_height = m_main_panned->get_height();
   
     float ratio = static_cast<float>(pb_original->get_width()) / pb_original->get_height();
-    
     int new_width = pb_original->get_width();
     int new_height = pb_original->get_height();
     
-    if(pb_original->get_width() > container_width || pb_original->get_height() > container_height) {
+    if (pb_original->get_width() > container_width || pb_original->get_height() > container_height) {
         if (pb_original->get_width() > container_width) {
             new_width = container_width;
             new_height = static_cast<int>(container_width / ratio);
@@ -127,43 +114,37 @@ void MainWindow::update_frame(const cv::Mat& frame) {
     }
   
     auto pb_scaled = pb_original->scale_simple(new_width, new_height, Gdk::INTERP_BILINEAR);
-  
-    if (m_video_image) {
+    if (m_video_image)
         m_video_image->set(pb_scaled);
-    } else {
+    else
         std::cerr << "Erreur : m_video_image n'est pas initialisé." << std::endl;
-    }
 }
 
-
 void MainWindow::on_apply_clicked() {
-    // Récupérer les valeurs des ajustements
     zoom_base.store(m_zoom_scale->get_value());
     smoothing_factor.store(m_smoothing_scale->get_value());
     detection_confidence.store(m_confidence_scale->get_value());
     zoom_multiplier.store(m_zoom_multiplier_scale->get_value());
 
-    // TODO soit recharger la caméra virtuelle ici
-    // soit renvoyer les valeurs pour les recharger dans main.cpp si possible
     bool is_size_changed = target_width.load() != static_cast<int>(m_width_spin->get_value()) ||
-            target_height.load() != static_cast<int>(m_height_spin->get_value());
+                             target_height.load() != static_cast<int>(m_height_spin->get_value());
     
     target_width.store(static_cast<int>(m_width_spin->get_value()));
     target_height.store(static_cast<int>(m_height_spin->get_value()));
 
-    // Récupérer la sélection du modèle
     if (m_model_selection_combo) {
-        auto active_id = m_model_selection_combo->get_active_id();
-        if (!active_id.empty()) {
-            model_selection.store(std::stoi(active_id));
+        Gtk::TreeModel::iterator iter = m_model_selection_combo->get_active();
+        if(iter) {
+            int selected_id = (*iter)[m_columns.id];
+            model_selection.store(selected_id);
         } else {
-            std::cerr << "Erreur : aucun modèle sélectionné." << std::endl;
+            std::cerr << "Erreur : m_model_selection_combo n'a pas de valeur active." << std::endl;
         }
+        
     } else {
         std::cerr << "Erreur : m_model_selection_combo n'est pas initialisé." << std::endl;
     }
 
-    // Emit signal if size has changed
     if (is_size_changed) {
         signal_apply_clicked.emit();
         m_width_spin->set_value(target_width.load());

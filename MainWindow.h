@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "gtkmm/alignment.h"
+#include "gtkmm/comboboxtext.h"
 #include "gtkmm/frame.h"
 #include "gtkmm/paned.h"
 #include "gtkmm/viewport.h"
@@ -35,8 +36,13 @@ protected:
     // Structure pour le modèle de ComboBox
     class ModelColumns : public Gtk::TreeModel::ColumnRecord {
     public:
-        ModelColumns() { add(m_col_id); }
-        Gtk::TreeModelColumn<Glib::ustring> m_col_id;
+        ModelColumns() {
+            add(id);
+            add(name);
+        }
+
+        Gtk::TreeModelColumn<int> id;
+        Gtk::TreeModelColumn<Glib::ustring> name;
     };
 
     // Widgets
@@ -48,7 +54,7 @@ protected:
     Gtk::Scale* m_confidence_scale;
     Gtk::SpinButton* m_width_spin;
     Gtk::SpinButton* m_height_spin;
-    Gtk::ComboBox* m_model_selection_combo;
+    Gtk::ComboBoxText* m_model_selection_combo;
     Gtk::Button* m_apply_button;
     
     // Modèle pour la ComboBox

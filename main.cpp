@@ -1,6 +1,7 @@
 #include <gtkmm.h>
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <opencv2/dnn.hpp>
 #include <atomic>
 #include <cstdlib>
 #include <libayatana-appindicator/app-indicator.h>
@@ -20,49 +21,50 @@
 namespace fs = std::filesystem;
 
 MainWindow* main_window = nullptr;
-
 double fps = 30.0;
 const char* outputFile = "/dev/video20";
-// The virtual camera output
+
+// Périphérique de sortie virtuel et capture webcam
 V4l2Output* videoOutput = nullptr;
-// Ouvrir la webcam (adapter l'index si besoin)
 cv::VideoCapture cap(1);
 
-// Paramètres configurables (atomiques pour la synchronisation entre threads)
-std::atomic<double> smoothing_factor(0.1);   
-std::atomic<double> detection_confidence(0.3); 
-std::atomic<int> model_selection(0);           
-std::atomic<double> zoom_base(1.5);            
-std::atomic<double> zoom_multiplier(0.0);      
-std::atomic<int> target_width(CAM_WIDTH);           
-std::atomic<int> target_height(CAM_HEIGHT);           
+// Paramètres configurables (atomiques pour la synchronisation)
+std::atomic<double> smoothing_factor(0.1);
+std::atomic<double> detection_confidence(0.3);
+std::atomic<int> model_selection(0);       // 0 : Haar Cascade, 1 : DNN (GPU)
+std::atomic<double> zoom_base(1.5);
+std::atomic<double> zoom_multiplier(0.0);
+std::atomic<int> target_width(CAM_WIDTH);
+std::atomic<int> target_height(CAM_HEIGHT);
 
-// Variables d'état
-std::atomic<cv::Point2f> last_center({0.5f, 0.5f}); // Centre normalisé
-std::atomic<double> last_zoom(1.5);    // Dernier niveau de zoom
+// Variables d'état pour le suivi
+std::atomic<cv::Point2f> last_center({0.5f, 0.5f});
+std::atomic<double> last_zoom(1.5);
 
-// Function declaration
+// Modèles de détection globaux
+cv::CascadeClassifier face_cascade;
+cv::dnn::Net face_net; // Pour le modèle DNN GPU
+
+// Ouvre (ou réouvre) la caméra virtuelle
 void open_virtual_camera() 
 {
-    // Vérifier l'existence du périphérique virtuel
     if (!fs::exists(outputFile))
-        main_window->show_message(Gtk::MESSAGE_WARNING, ("Attention : "+std::string(outputFile)+ "n'existe pas. Vérifiez v4l2loopback.").c_str() );
-    // Close the previous camera if it exists, 
-    // check if the object is memory allocated and opened
+        main_window->show_message(Gtk::MESSAGE_WARNING, ("Attention : " + std::string(outputFile) + " n'existe pas. Vérifiez v4l2loopback.").c_str());
+    
     if (videoOutput != nullptr) 
         videoOutput->stop();
     delete videoOutput;
     videoOutput = nullptr;
 
     V4L2DeviceParameters paramOut(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
-    target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
+        target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
     videoOutput = V4l2Output::create(paramOut);
     if (!videoOutput) {
         main_window->show_message(Gtk::MESSAGE_ERROR, ("Erreur : Impossible d'ouvrir la sortie " + std::string(outputFile)).c_str());
         exit(-1);
     }
 
-    if(target_width.load() != videoOutput->getWidth() || target_height.load() != videoOutput->getHeight())
+    if (target_width.load() != videoOutput->getWidth() || target_height.load() != videoOutput->getHeight())
     {
         main_window->show_message(Gtk::MESSAGE_WARNING, "La résolution demandée n'a pas été appliquée.");
         target_width.store(videoOutput->getWidth());
@@ -71,21 +73,18 @@ void open_virtual_camera()
 }
 
 void signal_handler(int signum) {
-    // Fermer proprement videoOutput ici
-    if (videoOutput) 
-    {
+    if (videoOutput) {
         videoOutput->stop();
         delete videoOutput;
         videoOutput = nullptr;
     }
-    if (cap.isOpened()) 
-    {
+    if (cap.isOpened()) {
         cap.release();
     }
     exit(0);
 }
 
-// Lissage d'une valeur
+// Fonction de lissage d'une valeur (pour la stabilité du suivi)
 template <typename T>
 T smoothValue(const T &current, const T &last, double factor) {
   return factor * current + (1 - factor) * last;
@@ -112,7 +111,6 @@ void setup_app_indicator() {
 
     GtkWidget *menu = gtk_menu_new();
 
-    // Élément "Show"
     GtkWidget *menu_item_show = gtk_menu_item_new_with_label("Show");
     g_signal_connect(menu_item_show, "activate", G_CALLBACK(+[](GtkMenuItem*, gpointer data){
         MainWindow* win = static_cast<MainWindow*>(data);
@@ -120,7 +118,6 @@ void setup_app_indicator() {
     }), main_window);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_show);
 
-    // Élément "Quit"
     GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
     g_signal_connect(menu_item_quit, "activate", G_CALLBACK(+[](GtkMenuItem*, gpointer){
         signal_handler(SIGINT);
@@ -134,10 +131,10 @@ void setup_app_indicator() {
 }
 
 int main(int argc, char *argv[]) {
-    signal(SIGINT, signal_handler); 
+    signal(SIGINT, signal_handler);
     auto app = Gtk::Application::create(argc, argv, "org.auto_framer");
 
-    // Charger l'interface depuis Glade
+    // Chargement de l'interface via Glade
     auto refBuilder = Gtk::Builder::create();
     try {
     #ifdef INSTALL_DATA_DIR
@@ -151,18 +148,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Créer la fenêtre principale
     refBuilder->get_widget_derived("main_window", main_window);
     if (!main_window) {
         std::cerr << "Erreur : la fenêtre principale n'a pas été trouvée dans le fichier Glade." << std::endl;
         return 1;
     }
 
-    // Initialiser GTK et l'AppIndicator
     gtk_init(nullptr, nullptr);
     setup_app_indicator();
-
-    // Connect the signal from MainWindow to handle reopening the virtual camera
     main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
 
     if (!cap.isOpened()) {
@@ -170,37 +163,73 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    // Charger le classificateur Haarcascade pour la détection faciale
-
-    #ifdef INSTALL_DATA_DIR
-        std::string cascade_path = std::string(INSTALL_DATA_DIR) + "/haarcascade_frontalface_default.xml";
-    #else
-        std::string cascade_path = fs::absolute("haarcascade_frontalface_default.xml").string();
-    #endif
-    cv::CascadeClassifier face_cascade;
+    // --- Chargement des modèles de détection ---
+    // Modèle Haar Cascade (CPU)
+#ifdef INSTALL_DATA_DIR
+    std::string cascade_path = std::string(INSTALL_DATA_DIR) + "/haarcascade_frontalface_default.xml";
+#else
+    std::string cascade_path = fs::absolute("haarcascade_frontalface_default.xml").string();
+#endif
     if (!face_cascade.load(cascade_path)) {
-        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible de charger le modèle de détection faciale.");
+        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible de charger le modèle Haar Cascade.");
         return -1;
+    }
+    
+    // Modèle DNN (GPU)
+#ifdef INSTALL_DATA_DIR
+    std::string dnn_proto_path = std::string(INSTALL_DATA_DIR) + "/deploy.prototxt";
+    std::string dnn_model_path = std::string(INSTALL_DATA_DIR) + "/bvlc_reference_caffenet.caffemodel";
+#else
+    std::string dnn_proto_path = fs::absolute("deploy.prototxt").string();
+    std::string dnn_model_path = fs::absolute("bvlc_reference_caffenet.caffemodel").string();
+#endif
+    try {
+        face_net = cv::dnn::readNetFromCaffe(dnn_proto_path, dnn_model_path);
+        face_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+        face_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    } catch (const cv::Exception& ex) {
+        main_window->show_message(Gtk::MESSAGE_WARNING, "Avertissement : Echec de l'initialisation du modèle DNN GPU. Seul le modèle Haar Cascade sera utilisé.");
     }
 
     // Ouvrir la caméra virtuelle
     open_virtual_camera();
 
-    // Timeout pour traiter une image environ toutes les 33 ms (~30 fps)
+    // Traitement en boucle (environ toutes les 33ms)
     Glib::signal_timeout().connect([&]() -> bool {
         cv::Mat frame;
         if (!cap.read(frame)) {
-            main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur de capture vidéo." );
+            main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur de capture vidéo.");
             return true;
         }
 
-        // Conversion en BGRA pour la détection
-        cv::Mat processedBGRA;
-        cv::cvtColor(frame, processedBGRA, cv::COLOR_BGR2BGRA);
-
-        // Détection de visage
         std::vector<cv::Rect> faces;
-        face_cascade.detectMultiScale(processedBGRA, faces, 1.1, 3, 0, cv::Size(100, 100));
+        int current_model = model_selection.load();
+        if (current_model == 0) {
+            // Détection par Haar Cascade (CPU)
+            cv::Mat processedBGRA;
+            cv::cvtColor(frame, processedBGRA, cv::COLOR_BGR2BGRA);
+            face_cascade.detectMultiScale(processedBGRA, faces, 1.1, 3, 0, cv::Size(100, 100));
+        } else if (current_model == 1 && !face_net.empty()) {
+            // Détection par DNN (GPU)
+            cv::Mat blob = cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300),
+                                                  cv::Scalar(104.0, 177.0, 123.0), false, false);
+            face_net.setInput(blob);
+            cv::Mat detections = face_net.forward();
+            const int numDetections = detections.size[2];
+            float conf_threshold = detection_confidence.load();
+            
+            cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F, detections.ptr<float>());
+            for (int i = 0; i < detectionMat.rows; i++) {
+                float confidence = detectionMat.at<float>(i, 2);
+                if (confidence > conf_threshold) {
+                    int x1 = static_cast<int>(detectionMat.at<float>(i, 3) * frame.cols);
+                    int y1 = static_cast<int>(detectionMat.at<float>(i, 4) * frame.rows);
+                    int x2 = static_cast<int>(detectionMat.at<float>(i, 5) * frame.cols);
+                    int y2 = static_cast<int>(detectionMat.at<float>(i, 6) * frame.rows);
+                    faces.push_back(cv::Rect(x1, y1, x2 - x1, y2 - y1));
+                }
+            }
+        }
 
         if (!faces.empty()) {
             cv::Rect face = faces[0];
@@ -208,7 +237,6 @@ int main(int argc, char *argv[]) {
                 (face.x + face.width / 2.0f) / static_cast<float>(frame.cols),
                 (face.y + face.height / 2.0f) / static_cast<float>(frame.rows)
             );
-            // Charge, modifie et réécrit last_center (membre statique de MainWindow)
             cv::Point2f old_center = last_center.load();
             old_center.x = smoothValue(current_center.x, old_center.x, smoothing_factor.load());
             old_center.y = smoothValue(current_center.y, old_center.y, smoothing_factor.load());
@@ -234,32 +262,25 @@ int main(int argc, char *argv[]) {
         cv::Mat processed;
         cv::resize(cropped_frame, processed, cv::Size(target_width.load(), target_height.load()));
 
-        // Conversion de l'image traitée en BGRA pour correspondre au format de sortie
         cv::Mat processedOutput;
         cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
 
-        // Envoi de la frame vers la caméra virtuelle
         size_t bufferSize = processedOutput.total() * processedOutput.elemSize();
         char* buffer = reinterpret_cast<char*>(processedOutput.data);
 
-        timeval timeout;
-        bool isWritable = true;//videoOutput->isWritable(&timeout);
-        if (isWritable) 
-        {
-            size_t nb = videoOutput->write(buffer, bufferSize);
-            if (nb != bufferSize) 
-                std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize << std::endl;
+        // Si aucun consommateur n'est actif, on ne traite pas la frame
+        
 
-            main_window->update_frame(processedOutput);
-        }
+        size_t nb = videoOutput->write(buffer, bufferSize);
+        if (nb != bufferSize)
+            std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize << std::endl;
 
+        main_window->update_frame(processedOutput);
         return true;
     }, 33);
 
     app->hold();
     int ret = app->run(*main_window);
-
-    // Libérer les ressources
     delete videoOutput;
     delete main_window;
     return ret;

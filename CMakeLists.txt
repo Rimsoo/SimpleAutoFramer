@@ -25,6 +25,8 @@ file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY icon.png DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY main_window.glade DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY simpleautoframer.Desktop DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY bvlc_reference_caffenet.caffemodel DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY deploy.prototxt DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Installation ---
 # Installer l'exécutable dans le répertoire bin
@@ -32,7 +34,7 @@ install(TARGETS simpleautoframer
         RUNTIME DESTINATION bin)
 
 # Installer les fichiers de ressources (modèle, icône, interface Glade) dans share/simpleautoframer
-install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade
+install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade bvlc_reference_caffenet.caffemodel deploy.prototxt
         DESTINATION share/simpleautoframer)
 
 # Installer le fichier .desktop dans /usr/share/applications
