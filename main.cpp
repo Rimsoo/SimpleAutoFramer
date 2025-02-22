@@ -164,31 +164,30 @@ int main(int argc, char *argv[]) {
     }
 
     // --- Chargement des modèles de détection ---
-    // Modèle Haar Cascade (CPU)
 #ifdef INSTALL_DATA_DIR
     std::string cascade_path = std::string(INSTALL_DATA_DIR) + "/haarcascade_frontalface_default.xml";
 #else
     std::string cascade_path = fs::absolute("haarcascade_frontalface_default.xml").string();
 #endif
-    if (!face_cascade.load(cascade_path)) {
-        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible de charger le modèle Haar Cascade.");
-        return -1;
-    }
+if (!face_cascade.load(cascade_path)) {
+    main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible de charger le modèle Haar Cascade.");
+    return -1;
+}
     
-    // Modèle DNN (GPU)
+// Chargement du modèle DNN res10_300x300_ssd_iter_140000
 #ifdef INSTALL_DATA_DIR
     std::string dnn_proto_path = std::string(INSTALL_DATA_DIR) + "/deploy.prototxt";
-    std::string dnn_model_path = std::string(INSTALL_DATA_DIR) + "/bvlc_reference_caffenet.caffemodel";
+    std::string dnn_model_path = std::string(INSTALL_DATA_DIR) + "/res10_300x300_ssd_iter_140000.caffemodel";
 #else
     std::string dnn_proto_path = fs::absolute("deploy.prototxt").string();
-    std::string dnn_model_path = fs::absolute("bvlc_reference_caffenet.caffemodel").string();
+    std::string dnn_model_path = fs::absolute("res10_300x300_ssd_iter_140000.caffemodel").string();
 #endif
     try {
         face_net = cv::dnn::readNetFromCaffe(dnn_proto_path, dnn_model_path);
         face_net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
         face_net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
     } catch (const cv::Exception& ex) {
-        main_window->show_message(Gtk::MESSAGE_WARNING, "Avertissement : Echec de l'initialisation du modèle DNN GPU. Seul le modèle Haar Cascade sera utilisé.");
+        main_window->show_message(Gtk::MESSAGE_WARNING, "Avertissement : Echec de l'initialisation du modèle DNN. Seul le modèle Haar Cascade sera utilisé.");
     }
 
     // Ouvrir la caméra virtuelle
@@ -209,15 +208,16 @@ int main(int argc, char *argv[]) {
             cv::Mat processedBGRA;
             cv::cvtColor(frame, processedBGRA, cv::COLOR_BGR2BGRA);
             face_cascade.detectMultiScale(processedBGRA, faces, 1.1, 3, 0, cv::Size(100, 100));
-        } else if (current_model == 1 && !face_net.empty()) {
-            // Détection par DNN (GPU)
+        } 
+        else if (current_model == 1 && !face_net.empty()) {
+            // Détection par DNN (CPU) avec res10_300x300_ssd_iter_140000
             cv::Mat blob = cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300),
                                                   cv::Scalar(104.0, 177.0, 123.0), false, false);
             face_net.setInput(blob);
             cv::Mat detections = face_net.forward();
-            const int numDetections = detections.size[2];
             float conf_threshold = detection_confidence.load();
             
+            // Remodélisation de la matrice de détections en 2D (N x 7)
             cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F, detections.ptr<float>());
             for (int i = 0; i < detectionMat.rows; i++) {
                 float confidence = detectionMat.at<float>(i, 2);

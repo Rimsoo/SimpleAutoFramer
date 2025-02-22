@@ -25,7 +25,7 @@ file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY icon.png DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY main_window.glade DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY simpleautoframer.Desktop DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY bvlc_reference_caffenet.caffemodel DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY res10_300x300_ssd_iter_140000.caffemodel DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY deploy.prototxt DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Installation ---
