@@ -22,7 +22,6 @@ namespace fs = std::filesystem;
 
 MainWindow* main_window = nullptr;
 double fps = 30.0;
-const char* outputFile = "/dev/video20";
 
 // Paramètres configurables (atomiques pour la synchronisation)
 std::atomic<int> camera_selection(0);
@@ -33,6 +32,7 @@ std::atomic<double> zoom_base(1.5);
 std::atomic<double> zoom_multiplier(0.0);
 std::atomic<int> target_width(CAM_WIDTH);
 std::atomic<int> target_height(CAM_HEIGHT);
+std::atomic<int> virtual_camera_selection(20);         
 
 // Variables d'état pour le suivi
 std::atomic<cv::Point2f> last_center({0.5f, 0.5f});
@@ -40,7 +40,7 @@ std::atomic<double> last_zoom(1.5);
 
 // Périphérique de sortie virtuel et capture webcam
 V4l2Output* videoOutput = nullptr;
-cv::VideoCapture cap(camera_selection.load());
+cv::VideoCapture cap = cv::VideoCapture();
 
 // Modèles de détection globaux
 cv::CascadeClassifier face_cascade;
@@ -57,13 +57,12 @@ void open_capture_camera() {
         main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible d'ouvrir la caméra de capture.\nSelectionnez une autre caméra dans les paramètres.");
         return;
     }
-    cap.set(cv::CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
-    cap.set(cv::CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);
 }
 
 // Ouvre (ou réouvre) la caméra virtuelle
 void open_virtual_camera() 
 {
+    std::string outputFile = "/dev/video" + std::to_string(virtual_camera_selection.load());
     if (!fs::exists(outputFile))
         main_window->show_message(Gtk::MESSAGE_WARNING, ("Attention : " + std::string(outputFile) + " n'existe pas. Vérifiez v4l2loopback.").c_str());
     
@@ -72,7 +71,7 @@ void open_virtual_camera()
     delete videoOutput;
     videoOutput = nullptr;
 
-    V4L2DeviceParameters paramOut(outputFile, v4l2_fourcc('B', 'G', 'R', '4'),
+    V4L2DeviceParameters paramOut(outputFile.c_str(), v4l2_fourcc('B', 'G', 'R', '4'),
         target_width.load(), target_height.load(), fps, IOTYPE_MMAP);
     videoOutput = V4l2Output::create(paramOut);
     if (!videoOutput) {
@@ -174,7 +173,7 @@ int main(int argc, char *argv[]) {
     setup_app_indicator();
 
     main_window->signal_camera_changed.connect(sigc::ptr_fun(&open_capture_camera));
-    //open_capture_camera();
+    open_capture_camera();
 
     // --- Chargement des modèles de détection ---
 #ifdef INSTALL_DATA_DIR
@@ -209,10 +208,11 @@ if (!face_cascade.load(cascade_path)) {
 
     // Traitement en boucle (environ toutes les 33ms)
     Glib::signal_timeout().connect([&]() -> bool {
-        return true;
+        if(!cap.isOpened())
+            return true;
         cv::Mat frame;
         if (!cap.read(frame)) {
-            main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur de capture vidéo.");
+            std::cerr << "Erreur : Impossible de lire la frame de la caméra." << std::endl;
             return true;
         }
 

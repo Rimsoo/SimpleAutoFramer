@@ -1,10 +1,12 @@
 #include "MainWindow.h"
 #include "gtkmm/enums.h"
+#include <filesystem>
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <gdkmm/pixbuf.h>
 #include <cstring>
 #include <atomic>
+#include <vector>
 
 MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>& builder)
     : Gtk::Window(cobject) {
@@ -20,6 +22,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     builder->get_widget("model_selection", m_model_selection_combo);
     builder->get_widget("main_panned", m_main_panned);
     builder->get_widget("camera_selection", m_camera_selection_combo);
+    builder->get_widget("virtual_camera_selection", m_virtual_camera_selection_combo);
 
     if (!m_video_image || !m_apply_button || !m_smoothing_scale || !m_zoom_scale ||
         !m_zoom_multiplier_scale || !m_confidence_scale || !m_width_spin ||
@@ -31,6 +34,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     setup_adjustments();
     setup_model_selection();
     setup_camera_selection();
+    setup_virtual_camera_selection();
 
     m_width_spin->set_value(target_width.load());
     m_height_spin->set_value(target_height.load());
@@ -50,7 +54,7 @@ void MainWindow::setup_adjustments() {
 
     setup_scale(m_zoom_scale, 1.0, 3.0, 0.1, 1.5);
     setup_scale(m_smoothing_scale, 0.0, 1.0, 0.01, 0.1);
-    setup_scale(m_zoom_multiplier_scale, 0.0, 1.0, 0.01, 0.0);
+    setup_scale(m_zoom_multiplier_scale, 0.0, 5.0, 0.5, 0.0);
     setup_scale(m_confidence_scale, 0.0, 1.0, 0.01, 0.3);
 
     m_width_spin->get_adjustment()->configure(1080, 320, 3840, 1, 10, 0);
@@ -73,25 +77,24 @@ void MainWindow::setup_model_selection() {
 }
 
 void MainWindow::setup_camera_selection() {
-    // Liste des périphériques vidéo dans /dev/video*
     Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
-    for (int i = 0; i < 10; i++) {
-        std::string device = "/dev/video" + std::to_string(i);
-        if (cv::VideoCapture cap(device); cap.isOpened()) {
-            Gtk::TreeModel::Row row = *store->append();
-            row[m_columns.name] = device;
-            row[m_columns.id] = i;
-        }
+    
+    auto devices = list_video_devices();
+    for (const auto& device : devices) {
+        // Extraire l'ID numérique du périphérique, par exemple "/dev/video3" -> 3
+        int id = std::stoi(device.substr(std::string("/dev/video").length()));
+        Gtk::TreeModel::Row row = *store->append();
+        row[m_columns.name] = device;
+        row[m_columns.id] = id;
     }
 
     m_camera_selection_combo->set_model(store);
     m_camera_selection_combo->pack_start(m_columns.name);
-
     m_camera_selection_combo->set_active(camera_selection.load());
 
     m_camera_selection_combo->signal_changed().connect([&]() {
         Gtk::TreeModel::iterator iter = m_camera_selection_combo->get_active();
-        if(iter) {
+        if (iter) {
             int selected_id = (*iter)[m_columns.id];
             camera_selection.store(selected_id);
             signal_camera_changed.emit();
@@ -99,6 +102,39 @@ void MainWindow::setup_camera_selection() {
             show_message(Gtk::MESSAGE_ERROR, "Erreur : Aucune caméra sélectionnée.");
         }
     });
+}
+
+void MainWindow::setup_virtual_camera_selection() {
+    Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
+    
+    Gtk::TreeModel::Row active_iter;
+    auto devices = list_video_devices();
+    for (const auto& device : devices) {
+        // Extraire l'ID numérique du périphérique, par exemple "/dev/video3" -> 3
+        int id = std::stoi(device.substr(std::string("/dev/video").length()));
+        Gtk::TreeModel::Row row = *store->append();
+        row[m_columns.name] = device;
+        row[m_columns.id] = id;
+
+        if (id == virtual_camera_selection.load())
+            active_iter = row;
+    }
+
+    m_virtual_camera_selection_combo->set_model(store);
+    m_virtual_camera_selection_combo->pack_start(m_columns.name);
+    m_virtual_camera_selection_combo->set_active(active_iter);
+}
+
+std::vector<std::string> MainWindow::list_video_devices() {
+    std::vector<std::string> devices;
+    for (const auto& entry : std::filesystem::directory_iterator("/dev")) {
+        std::string filename = entry.path().filename().string();
+        // Vérifier que le nom commence par "video" et qu'il est de la forme "videoX"
+        if (filename.rfind("video", 0) == 0) {
+            devices.push_back(entry.path().string());
+        }
+    }
+    return devices;
 }
 
 bool MainWindow::on_delete_event(GdkEventAny* any_event) {
@@ -157,11 +193,14 @@ void MainWindow::on_apply_clicked() {
     detection_confidence.store(m_confidence_scale->get_value());
     zoom_multiplier.store(m_zoom_multiplier_scale->get_value());
 
-    bool is_size_changed = target_width.load() != static_cast<int>(m_width_spin->get_value()) ||
-                             target_height.load() != static_cast<int>(m_height_spin->get_value());
+    auto vcam_id = (*m_virtual_camera_selection_combo->get_active())[m_columns.id];
+    bool reload_virtual_camera = target_width.load() != static_cast<int>(m_width_spin->get_value()) ||
+                             target_height.load() != static_cast<int>(m_height_spin->get_value()) ||
+                            virtual_camera_selection.load() != vcam_id;
     
     target_width.store(static_cast<int>(m_width_spin->get_value()));
     target_height.store(static_cast<int>(m_height_spin->get_value()));
+    virtual_camera_selection.store(vcam_id);
 
     if (m_model_selection_combo) {
         Gtk::TreeModel::iterator iter = m_model_selection_combo->get_active();
@@ -176,7 +215,7 @@ void MainWindow::on_apply_clicked() {
         std::cerr << "Erreur : m_model_selection_combo n'est pas initialisé." << std::endl;
     }
 
-    if (is_size_changed) {
+    if (reload_virtual_camera) {
         signal_apply_clicked.emit();
         m_width_spin->set_value(target_width.load());
         m_height_spin->set_value(target_height.load());

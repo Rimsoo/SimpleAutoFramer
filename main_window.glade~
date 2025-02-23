@@ -68,7 +68,7 @@
                 <property name="margin-top">10</property>
                 <property name="margin-bottom">10</property>
                 <child>
-                  <!-- n-columns=4 n-rows=8 -->
+                  <!-- n-columns=4 n-rows=9 -->
                   <object class="GtkGrid">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
@@ -78,16 +78,24 @@
                     <property name="row-homogeneous">True</property>
                     <property name="column-homogeneous">True</property>
                     <child>
-                      <object class="GtkScale" id="smoothing_factor">
+                      <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
                         <property name="hexpand">True</property>
-                        <property name="lower-stepper-sensitivity">on</property>
-                        <property name="upper-stepper-sensitivity">on</property>
-                        <property name="show-fill-level">True</property>
-                        <property name="fill-level">1</property>
-                        <property name="round-digits">2</property>
-                        <property name="digits">2</property>
+                        <property name="label" translatable="yes">Capture camera:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="camera_selection">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="active">0</property>
+                        <property name="active-id">0</property>
                       </object>
                       <packing>
                         <property name="left-attach">1</property>
@@ -96,39 +104,116 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkScale" id="zoom_base">
+                      <object class="GtkButton" id="apply_button">
+                        <property name="label">gtk-apply</property>
                         <property name="visible">True</property>
                         <property name="can-focus">True</property>
-                        <property name="hexpand">True</property>
-                        <property name="lower-stepper-sensitivity">on</property>
-                        <property name="upper-stepper-sensitivity">on</property>
-                        <property name="show-fill-level">True</property>
-                        <property name="fill-level">5</property>
-                        <property name="round-digits">2</property>
-                        <property name="digits">2</property>
+                        <property name="receives-default">True</property>
+                        <property name="use-stock">True</property>
+                        <property name="always-show-image">True</property>
                       </object>
                       <packing>
                         <property name="left-attach">1</property>
-                        <property name="top-attach">1</property>
+                        <property name="top-attach">8</property>
+                        <property name="width">2</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Select model:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">7</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="model_selection">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="active">0</property>
+                        <property name="active-id">0</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">7</property>
                         <property name="width">3</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkScale" id="zoom_multiplier">
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Target width:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">6</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton" id="target_width">
                         <property name="visible">True</property>
                         <property name="can-focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="lower-stepper-sensitivity">on</property>
-                        <property name="upper-stepper-sensitivity">on</property>
-                        <property name="show-fill-level">True</property>
-                        <property name="fill-level">5</property>
-                        <property name="round-digits">2</property>
-                        <property name="digits">2</property>
+                        <property name="text" translatable="yes">1080</property>
+                        <property name="input-purpose">digits</property>
+                        <property name="climb-rate">0.10</property>
+                        <property name="numeric">True</property>
+                        <property name="update-policy">if-valid</property>
                       </object>
                       <packing>
                         <property name="left-attach">1</property>
-                        <property name="top-attach">2</property>
-                        <property name="width">3</property>
+                        <property name="top-attach">6</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="margin-start">20</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Target height:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">2</property>
+                        <property name="top-attach">6</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton" id="target_height">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="text" translatable="yes">720</property>
+                        <property name="input-purpose">digits</property>
+                        <property name="climb-rate">0.10</property>
+                        <property name="numeric">True</property>
+                        <property name="update-policy">if-valid</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">3</property>
+                        <property name="top-attach">6</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Detection confidence:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">5</property>
                       </packing>
                     </child>
                     <child>
@@ -140,6 +225,68 @@
                         <property name="upper-stepper-sensitivity">on</property>
                         <property name="show-fill-level">True</property>
                         <property name="fill-level">1</property>
+                        <property name="round-digits">2</property>
+                        <property name="digits">2</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">5</property>
+                        <property name="width">3</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Zoom multiplier:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">4</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkScale" id="zoom_multiplier">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="lower-stepper-sensitivity">on</property>
+                        <property name="upper-stepper-sensitivity">on</property>
+                        <property name="show-fill-level">True</property>
+                        <property name="fill-level">5</property>
+                        <property name="round-digits">10</property>
+                        <property name="digits">2</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">4</property>
+                        <property name="width">3</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Base zoom:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">3</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkScale" id="zoom_base">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="hexpand">True</property>
+                        <property name="lower-stepper-sensitivity">on</property>
+                        <property name="upper-stepper-sensitivity">on</property>
+                        <property name="show-fill-level">True</property>
+                        <property name="fill-level">5</property>
                         <property name="round-digits">2</property>
                         <property name="digits">2</property>
                       </object>
@@ -159,145 +306,24 @@
                       </object>
                       <packing>
                         <property name="left-attach">0</property>
-                        <property name="top-attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Base zoom:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Zoom multiplier:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
                         <property name="top-attach">2</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Detection confidence:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">3</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Target width:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="margin-start">20</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Target height:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">2</property>
-                        <property name="top-attach">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="halign">start</property>
-                        <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Select model:</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">5</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkSpinButton" id="target_width">
+                      <object class="GtkScale" id="smoothing_factor">
                         <property name="visible">True</property>
                         <property name="can-focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="text" translatable="yes">1080</property>
-                        <property name="input-purpose">digits</property>
-                        <property name="climb-rate">0.10</property>
-                        <property name="numeric">True</property>
-                        <property name="update-policy">if-valid</property>
+                        <property name="lower-stepper-sensitivity">on</property>
+                        <property name="upper-stepper-sensitivity">on</property>
+                        <property name="show-fill-level">True</property>
+                        <property name="fill-level">1</property>
+                        <property name="round-digits">2</property>
+                        <property name="digits">2</property>
                       </object>
                       <packing>
                         <property name="left-attach">1</property>
-                        <property name="top-attach">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkSpinButton" id="target_height">
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="hexpand">True</property>
-                        <property name="text" translatable="yes">720</property>
-                        <property name="input-purpose">digits</property>
-                        <property name="climb-rate">0.10</property>
-                        <property name="numeric">True</property>
-                        <property name="update-policy">if-valid</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">3</property>
-                        <property name="top-attach">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="apply_button">
-                        <property name="label">gtk-apply</property>
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
-                        <property name="use-stock">True</property>
-                        <property name="always-show-image">True</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">1</property>
-                        <property name="top-attach">6</property>
-                        <property name="width">2</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkComboBoxText" id="model_selection">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="active">0</property>
-                        <property name="active-id">0</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">1</property>
-                        <property name="top-attach">5</property>
+                        <property name="top-attach">2</property>
                         <property name="width">3</property>
                       </packing>
                     </child>
@@ -307,15 +333,15 @@
                         <property name="can-focus">False</property>
                         <property name="halign">start</property>
                         <property name="hexpand">True</property>
-                        <property name="label" translatable="yes">Capture device:</property>
+                        <property name="label" translatable="yes">Virtual camera:</property>
                       </object>
                       <packing>
                         <property name="left-attach">0</property>
-                        <property name="top-attach">7</property>
+                        <property name="top-attach">1</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBoxText" id="model_selection1">
+                      <object class="GtkComboBoxText" id="virtual_camera_selection">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="active">0</property>
@@ -323,7 +349,7 @@
                       </object>
                       <packing>
                         <property name="left-attach">1</property>
-                        <property name="top-attach">7</property>
+                        <property name="top-attach">1</property>
                         <property name="width">3</property>
                       </packing>
                     </child>
