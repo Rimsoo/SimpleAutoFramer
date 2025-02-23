@@ -68,7 +68,7 @@
                 <property name="margin-top">10</property>
                 <property name="margin-bottom">10</property>
                 <child>
-                  <!-- n-columns=4 n-rows=7 -->
+                  <!-- n-columns=4 n-rows=8 -->
                   <object class="GtkGrid">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
@@ -289,7 +289,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox" id="model_selection">
+                      <object class="GtkComboBoxText" id="model_selection">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="active">0</property>
@@ -298,6 +298,32 @@
                       <packing>
                         <property name="left-attach">1</property>
                         <property name="top-attach">5</property>
+                        <property name="width">3</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">start</property>
+                        <property name="hexpand">True</property>
+                        <property name="label" translatable="yes">Capture device:</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">7</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="model_selection1">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="active">0</property>
+                        <property name="active-id">0</property>
+                      </object>
+                      <packing>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">7</property>
                         <property name="width">3</property>
                       </packing>
                     </child>

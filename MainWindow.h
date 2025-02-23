@@ -13,6 +13,7 @@
 extern std::atomic<double> smoothing_factor;
 extern std::atomic<double> detection_confidence;
 extern std::atomic<int> model_selection;
+extern std::atomic<int> camera_selection;
 extern std::atomic<double> zoom_base;
 extern std::atomic<double> zoom_multiplier;
 extern std::atomic<int> target_width;
@@ -28,6 +29,7 @@ public:
     virtual ~MainWindow() = default;
 
     sigc::signal<void> signal_apply_clicked;
+    sigc::signal<void> signal_camera_changed;
 
     void update_frame(const cv::Mat& frame);
     void show_message(Gtk::MessageType type, const std::string& msg);
@@ -55,6 +57,7 @@ protected:
     Gtk::SpinButton* m_width_spin;
     Gtk::SpinButton* m_height_spin;
     Gtk::ComboBoxText* m_model_selection_combo;
+    Gtk::ComboBoxText* m_camera_selection_combo;
     Gtk::Button* m_apply_button;
     
     // Modèle pour la ComboBox
@@ -63,6 +66,7 @@ protected:
     // Méthodes d'initialisation
     void setup_adjustments();
     void setup_model_selection();
+    void setup_camera_selection();
 
     // Gestionnaires de signaux
     bool on_delete_event(GdkEventAny* any_event) override;

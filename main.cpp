@@ -24,14 +24,11 @@ MainWindow* main_window = nullptr;
 double fps = 30.0;
 const char* outputFile = "/dev/video20";
 
-// Périphérique de sortie virtuel et capture webcam
-V4l2Output* videoOutput = nullptr;
-cv::VideoCapture cap(1);
-
 // Paramètres configurables (atomiques pour la synchronisation)
+std::atomic<int> camera_selection(0);
 std::atomic<double> smoothing_factor(0.1);
 std::atomic<double> detection_confidence(0.3);
-std::atomic<int> model_selection(0);       // 0 : Haar Cascade, 1 : DNN (GPU)
+std::atomic<int> model_selection(1);       // 0 : Haar Cascade, 1 : DNN (GPU)
 std::atomic<double> zoom_base(1.5);
 std::atomic<double> zoom_multiplier(0.0);
 std::atomic<int> target_width(CAM_WIDTH);
@@ -41,9 +38,28 @@ std::atomic<int> target_height(CAM_HEIGHT);
 std::atomic<cv::Point2f> last_center({0.5f, 0.5f});
 std::atomic<double> last_zoom(1.5);
 
+// Périphérique de sortie virtuel et capture webcam
+V4l2Output* videoOutput = nullptr;
+cv::VideoCapture cap(camera_selection.load());
+
 // Modèles de détection globaux
 cv::CascadeClassifier face_cascade;
 cv::dnn::Net face_net; // Pour le modèle DNN GPU
+
+// Ouvre (ou réouvre) la caméra de capture
+void open_capture_camera() {
+    if (cap.isOpened())
+        cap.release();
+    
+    cap.open(camera_selection.load());
+
+    if (!cap.isOpened()) {
+        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible d'ouvrir la caméra de capture.\nSelectionnez une autre caméra dans les paramètres.");
+        return;
+    }
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, CAM_WIDTH);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT);
+}
 
 // Ouvre (ou réouvre) la caméra virtuelle
 void open_virtual_camera() 
@@ -156,12 +172,9 @@ int main(int argc, char *argv[]) {
 
     gtk_init(nullptr, nullptr);
     setup_app_indicator();
-    main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
 
-    if (!cap.isOpened()) {
-        main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible d'ouvrir la webcam.");
-        return -1;
-    }
+    main_window->signal_camera_changed.connect(sigc::ptr_fun(&open_capture_camera));
+    //open_capture_camera();
 
     // --- Chargement des modèles de détection ---
 #ifdef INSTALL_DATA_DIR
@@ -190,11 +203,13 @@ if (!face_cascade.load(cascade_path)) {
         main_window->show_message(Gtk::MESSAGE_WARNING, "Avertissement : Echec de l'initialisation du modèle DNN. Seul le modèle Haar Cascade sera utilisé.");
     }
 
+    main_window->signal_apply_clicked.connect(sigc::ptr_fun(&open_virtual_camera));
     // Ouvrir la caméra virtuelle
     open_virtual_camera();
 
     // Traitement en boucle (environ toutes les 33ms)
     Glib::signal_timeout().connect([&]() -> bool {
+        return true;
         cv::Mat frame;
         if (!cap.read(frame)) {
             main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur de capture vidéo.");

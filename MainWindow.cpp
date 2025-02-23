@@ -19,6 +19,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
     builder->get_widget("target_height", m_height_spin);
     builder->get_widget("model_selection", m_model_selection_combo);
     builder->get_widget("main_panned", m_main_panned);
+    builder->get_widget("camera_selection", m_camera_selection_combo);
 
     if (!m_video_image || !m_apply_button || !m_smoothing_scale || !m_zoom_scale ||
         !m_zoom_multiplier_scale || !m_confidence_scale || !m_width_spin ||
@@ -29,6 +30,7 @@ MainWindow::MainWindow(BaseObjectType* cobject, const Glib::RefPtr<Gtk::Builder>
 
     setup_adjustments();
     setup_model_selection();
+    setup_camera_selection();
 
     m_width_spin->set_value(target_width.load());
     m_height_spin->set_value(target_height.load());
@@ -68,6 +70,35 @@ void MainWindow::setup_model_selection() {
     m_model_selection_combo->pack_start(m_columns.name);
 
     m_model_selection_combo->set_active(model_selection.load());
+}
+
+void MainWindow::setup_camera_selection() {
+    // Liste des périphériques vidéo dans /dev/video*
+    Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
+    for (int i = 0; i < 10; i++) {
+        std::string device = "/dev/video" + std::to_string(i);
+        if (cv::VideoCapture cap(device); cap.isOpened()) {
+            Gtk::TreeModel::Row row = *store->append();
+            row[m_columns.name] = device;
+            row[m_columns.id] = i;
+        }
+    }
+
+    m_camera_selection_combo->set_model(store);
+    m_camera_selection_combo->pack_start(m_columns.name);
+
+    m_camera_selection_combo->set_active(camera_selection.load());
+
+    m_camera_selection_combo->signal_changed().connect([&]() {
+        Gtk::TreeModel::iterator iter = m_camera_selection_combo->get_active();
+        if(iter) {
+            int selected_id = (*iter)[m_columns.id];
+            camera_selection.store(selected_id);
+            signal_camera_changed.emit();
+        } else {
+            show_message(Gtk::MESSAGE_ERROR, "Erreur : Aucune caméra sélectionnée.");
+        }
+    });
 }
 
 bool MainWindow::on_delete_event(GdkEventAny* any_event) {
