@@ -59,7 +59,7 @@ install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E remove
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
 
-option(INSTALL_MODE "Enable install mode" ON)
+option(INSTALL_MODE "Enable install mode" OFF)
 
 if(INSTALL_MODE)
     add_compile_definitions(INSTALL_MODE)

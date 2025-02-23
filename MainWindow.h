@@ -14,6 +14,7 @@ extern std::atomic<double> smoothing_factor;
 extern std::atomic<double> detection_confidence;
 extern std::atomic<int> model_selection;
 extern std::atomic<int> camera_selection;
+extern std::atomic<int> virtual_camera_selection;
 extern std::atomic<double> zoom_base;
 extern std::atomic<double> zoom_multiplier;
 extern std::atomic<int> target_width;
@@ -58,6 +59,7 @@ protected:
     Gtk::SpinButton* m_height_spin;
     Gtk::ComboBoxText* m_model_selection_combo;
     Gtk::ComboBoxText* m_camera_selection_combo;
+    Gtk::ComboBoxText* m_virtual_camera_selection_combo;
     Gtk::Button* m_apply_button;
     
     // Modèle pour la ComboBox
@@ -67,6 +69,8 @@ protected:
     void setup_adjustments();
     void setup_model_selection();
     void setup_camera_selection();
+    void setup_virtual_camera_selection();
+    std::vector<std::string> list_video_devices();
 
     // Gestionnaires de signaux
     bool on_delete_event(GdkEventAny* any_event) override;
