@@ -24,30 +24,42 @@ target_link_libraries(simpleautoframer PRIVATE ${OpenCV_LIBS} ${GTKMM_LIBRARIES}
 file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY icon.png DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY main_window.glade DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY simpleautoframer.Desktop DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY simpleautoframer.desktop DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY res10_300x300_ssd_iter_140000.caffemodel DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY deploy.prototxt DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY simpleautoframer-uninstall DESTINATION ${CMAKE_BINARY_DIR})
 
 # --- Installation ---
 # Installer l'exécutable dans le répertoire bin
 install(TARGETS simpleautoframer
-        RUNTIME DESTINATION bin)
+        RUNTIME DESTINATION /usr/bin)
+
+install(FILES simpleautoframer-uninstall
+        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
+        DESTINATION /usr/bin)
 
 # Installer les fichiers de ressources (modèle, icône, interface Glade) dans share/simpleautoframer
-install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade bvlc_reference_caffenet.caffemodel deploy.prototxt
-        DESTINATION share/simpleautoframer)
+install(FILES haarcascade_frontalface_default.xml icon.png main_window.glade res10_300x300_ssd_iter_140000.caffemodel deploy.prototxt
+        DESTINATION /usr/share/simpleautoframer)
 
 # Installer le fichier .desktop dans /usr/share/applications
-# install(FILES simpleautoframer.Desktop
-#         DESTINATION /usr/share/applications)
-# Installer le fichier .icon dans /usr/share/icons/simpleautoframer/simpleautoframer.png
-# install(FILES icon.png simpleautoframer.Desktop
-#         DESTINATION /usr/share/simpleautoframer/simpleautoframer.png)
+install(FILES simpleautoframer.desktop
+        DESTINATION /usr/share/applications)
+# Installer le fichier .icon
+install(FILES icon.png
+        DESTINATION /usr/share/icons/hicolor/64x64/apps)
+install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E copy 
+    \"/usr/share/icons/hicolor/64x64/apps/icon.png\" 
+    \"/usr/share/icons/hicolor/64x64/apps/simpleautoframer.png\")")
+
+# Supprimer icon.png
+install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E remove 
+    \"/usr/share/icons/hicolor/64x64/apps/icon.png\")")
 
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
 
-option(INSTALL_MODE "Enable install mode" OFF)
+option(INSTALL_MODE "Enable install mode" ON)
 
 if(INSTALL_MODE)
     add_compile_definitions(INSTALL_MODE)

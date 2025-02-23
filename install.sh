@@ -32,14 +32,19 @@ make || { echo "Error while compiling the project"; exit 1; }
 
 echo "Installing project..."
 make install || { echo "Error while installing the project"; exit 1; }
-chmod +x /usr/share/applications/simpleautoframer.Desktop
+chmod +x /usr/bin/simpleautoframer
+chmod +x /usr/bin/simpleautoframer-uninstall
 
 cd ..
 
 # Delete the build directory
 rm -rf build
 
+echo "Installation completed successfully."
+echo "You can now run the program by searching for 'SimpleAutoFramer' in the application menu."
+echo "Or by running the command: simpleautoframer"
+echo "To uninstall the program, run the command: sudo simpleautoframer-uninstall"
 # Lancer l'exécutable installé
-echo "Running the program..."
-# newgrp video
-/usr/local/bin/simpleautoframer || { echo "Error while running the program"; exit 1; }
+# echo "Running the program..."
+# # newgrp video
+# /usr/local/bin/simpleautoframer || { echo "Error while running the program"; exit 1; }

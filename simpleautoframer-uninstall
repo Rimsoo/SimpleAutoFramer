@@ -1,0 +1,16 @@
+#!/bin/bash
+# Verifier le sudo
+if [ "$EUID" -ne 0 ]; then
+    cd ..
+    echo "Need to be root to uninstall"
+    exit 1
+fi
+
+# Supprimer les fichiers
+rm -f /usr/bin/simpleautoframer
+rm -rf /usr/share/simpleautoframer
+rm -f /usr/share/applications/simpleautoframer.desktop
+rm -f /usr/share/icons/hicolor/64x64/apps/simpleautoframer.png
+rm -f /usr/bin/simpleautoframer-uninstall
+echo "SimpleAutoFramer has been uninstalled"
+exit 0

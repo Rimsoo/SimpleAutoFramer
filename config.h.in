@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 #ifdef INSTALL_MODE
-    #define INSTALL_DATA_DIR "@CMAKE_INSTALL_PREFIX@/share/simpleautoframer"
+    #define INSTALL_DATA_DIR "/usr/share/simpleautoframer"
 #endif
 
 #endif // CONFIG_H
