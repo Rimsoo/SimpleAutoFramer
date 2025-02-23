@@ -36,5 +36,7 @@ simpleautoframe
 
 - [x] Installation script
 - [x] XML UI
-- [ ] Parametrable model
-- [ ] GPU support
+- [x] Parametrable model
+- [x] GPU support
+- [ ] Configuration file
+- [ ] Config shortcuts
