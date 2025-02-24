@@ -12,7 +12,7 @@ pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
 
 include_directories(${GTKMM_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
 
-add_executable(simpleautoframer main.cpp MainWindow.cpp)
+add_executable(simpleautoframer main.cpp MainWindow.cpp ConfigManager.cpp)
 
 # Ajouter le sous dossier libv4l2cpp 
 add_subdirectory(libv4l2cpp EXCLUDE_FROM_ALL)

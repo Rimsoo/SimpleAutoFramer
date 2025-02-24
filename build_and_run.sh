@@ -1,14 +1,10 @@
 #!/bin/bash
 
 # Créer le dossier build s'il n'existe pas
-if [ -d "build" ]; then
-    echo "Le dossier build existe déjà."
-    echo "Suppression du dossier build..."
-    rm -rf build
+if [ ! -d "build" ]; then
+    echo "Création du dossier build..."
+    mkdir build
 fi
-
-echo "Création du dossier build..."
-mkdir build
 
 # Se déplacer dans le dossier build
 cd build

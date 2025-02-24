@@ -10,7 +10,7 @@ fi
 
 echo "Installing dependencies..."
 apt update || { echo "Error while updating the package list"; exit 1; }
-apt install build-essential cmake libopencv-dev libgtkmm-3.0-dev libayatana-appindicator3-dev libtbbmalloc2 libgtk-3-dev v4l2loopback-dkms libboost-all-dev || { echo "Error while installing dependencies"; exit 1; }
+apt install build-essential cmake nlohmann-json3-dev libopencv-dev libgtkmm-3.0-dev libayatana-appindicator3-dev libtbbmalloc2 libgtk-3-dev v4l2loopback-dkms libboost-all-dev || { echo "Error while installing dependencies"; exit 1; }
 
 # Load the v4l2loopback module
 modprobe v4l2loopback devices=1 video_nr=20 card_label="AutoFrameCam"
