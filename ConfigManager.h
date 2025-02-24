@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glibmm/ustring.h"
 #include <mutex>
 #include <string>
 #include <vector>
@@ -13,10 +14,11 @@ public:
     explicit ConfigManager(const std::string& configFilePath);
     
     // Gestion des configurations
-    void createConfig(const std::string& name);
+    void createConfig(const std::string& name = "default");
     void deleteConfig(const std::string& name);
-    void switchConfig(const std::string& name);
+    void switchConfig(const Glib::ustring& name);
     std::vector<std::string> getConfigList() const;
+    std::string getCurrentConfigName() const { return currentConfig->name; }
 
     // Getters/Setters pour la configuration courante
     // Getters
@@ -60,17 +62,17 @@ private:
 
         // Conversion JSON
         nlohmann::json toJson() const;
-        static Config fromJson(const nlohmann::json& j);
+        static Config* fromJson(const nlohmann::json& j);
     };
 
     mutable std::mutex mutex_;
     std::string configFilename;
-    Config currentConfig;
-    std::vector<Config> savedConfigs;
+    Config* currentConfig;
+    std::vector<Config*> savedConfigs;
 
     // Helpers
     void applyConfig(const Config& config);
     void internalSave();
-    Config getDefaultConfig() const { return Config(); }
-    std::vector<Config>::iterator findConfig(const std::string& name);
+    Config* getDefaultConfig() const { return new Config(); }
+    std::vector<Config*>::iterator findConfig(const std::string& name);
 };

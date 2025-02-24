@@ -47,6 +47,7 @@ protected:
     Gtk::ComboBoxText* m_model_selection_combo;
     Gtk::ComboBoxText* m_camera_selection_combo;
     Gtk::ComboBoxText* m_virtual_camera_selection_combo;
+    Gtk::ComboBoxText* m_config_box;
     Gtk::Button* m_apply_button;
     Gtk::Entry* m_config_name;
     
@@ -54,7 +55,9 @@ protected:
     ModelColumns m_columns;
 
     // Méthodes d'initialisation
+    void config_setup();
     void setup_adjustments();
+    void setup_config_box();
     void setup_model_selection();
     void setup_camera_selection(Gtk::ComboBoxText* combo, int current_selection);
     std::vector<std::string> list_video_devices();

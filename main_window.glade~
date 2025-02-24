@@ -354,10 +354,17 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkComboBoxText" id="config_box">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="placeholder-text" translatable="yes">(Optional) Config name</property>
+                        <property name="can-focus">False</property>
+                        <property name="active">0</property>
+                        <property name="has-entry">True</property>
+                        <property name="active-id">0</property>
+                        <child internal-child="entry">
+                          <object class="GtkEntry" id="config_name">
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="left-attach">0</property>

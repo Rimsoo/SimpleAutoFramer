@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "glibmm/ustring.h"
 #include "gtkmm/enums.h"
 #include <atomic>
 #include <cstring>
@@ -25,6 +26,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
     builder->get_widget("camera_selection", m_camera_selection_combo);
     builder->get_widget("virtual_camera_selection",m_virtual_camera_selection_combo);
     builder->get_widget("config_name", m_config_name);
+    builder->get_widget("config_box", m_config_box);
 
     if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
         !m_zoom_scale || !m_zoom_multiplier_scale || !m_confidence_scale ||
@@ -43,6 +45,11 @@ MainWindow::MainWindow(BaseObjectType *cobject,
 void MainWindow::setConfigManager(ConfigManager* configManager) {
     this->configManager = configManager;
 
+    config_setup();
+}
+
+void MainWindow::config_setup() {
+    setup_config_box();
     setup_adjustments();
     setup_model_selection();
     setup_camera_selection(m_camera_selection_combo, 
@@ -52,6 +59,33 @@ void MainWindow::setConfigManager(ConfigManager* configManager) {
 
     m_width_spin->set_value(configManager->getTargetWidth());
     m_height_spin->set_value(configManager->getTargetHeight());
+}
+
+void MainWindow::setup_config_box() {
+    auto store = Gtk::ListStore::create(m_columns);
+    auto configs = configManager->getConfigList();
+
+    Gtk::TreeModel::Row active_iter;
+    for (const auto &name : configs) {
+        Gtk::TreeModel::Row row = *store->append();
+        row[m_columns.name] = name;
+        if (name.compare(configManager->getCurrentConfigName()) == 0)
+            active_iter = row;
+    }
+
+    m_config_box->set_model(store);
+    m_config_box->pack_start(m_columns.name);
+    m_config_box->set_active(active_iter);
+
+    m_config_box->signal_changed().connect([this]() {
+        auto active_iter = m_config_box->get_active();
+        if (active_iter)
+        {        
+            auto name = (*active_iter)[m_columns.name];
+            configManager->switchConfig(name);
+            config_setup();
+        }
+    });
 }
 
 void MainWindow::setup_adjustments() {
