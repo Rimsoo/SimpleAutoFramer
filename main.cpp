@@ -15,6 +15,9 @@
 #include "V4l2Device.h"
 #include "gtkmm/enums.h"
 #include <config.h>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 namespace fs = std::filesystem;  
 
@@ -32,6 +35,25 @@ cv::VideoCapture cap = cv::VideoCapture();
 // Modèles de détection globaux
 cv::CascadeClassifier face_cascade;
 cv::dnn::Net face_net; // Pour le modèle DNN GPU
+
+std::atomic<bool> capturingRunning{false};
+std::mutex frameMutex;
+cv::Mat sharedFrame;
+std::thread captureThread;
+
+void capture_loop() {
+    while (capturingRunning) {
+        if (cap.isOpened()) {
+            cv::Mat frame;
+            if (cap.read(frame)) {
+                std::lock_guard<std::mutex> lock(frameMutex);
+                frame.copyTo(sharedFrame);
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Petite pause
+    }
+}
 
 // Ouvre (ou réouvre) la caméra de capture
 void open_capture_camera(ConfigManager& configManager) {
@@ -77,6 +99,10 @@ void open_virtual_camera(ConfigManager& configManager)
 }
 
 void close_all() {
+    capturingRunning = false;
+    if (captureThread.joinable())
+        captureThread.join();
+
     if (videoOutput) {
         videoOutput->stop();
         delete videoOutput;
@@ -166,6 +192,8 @@ int main(int argc, char *argv[]) {
         open_capture_camera(configManager); // 42 est le paramètre que vous souhaitez passer
     });
     open_capture_camera(configManager);
+    capturingRunning = true;
+    captureThread = std::thread(capture_loop);
 
     // --- Chargement des modèles de détection ---
 #ifdef INSTALL_DATA_DIR
@@ -204,12 +232,15 @@ if (!face_cascade.load(cascade_path)) {
     Glib::signal_timeout().connect([&]() -> bool {
         if(!cap.isOpened() || !videoOutput)
             return true;
-        cv::Mat frame;
-        if (!cap.read(frame)) {
-            std::cerr << "Erreur : Impossible de lire la frame de la caméra." << std::endl;
-            return true;
-        }
 
+        cv::Mat frame;
+        {
+            std::lock_guard<std::mutex> lock(frameMutex);
+            if (sharedFrame.empty())
+                return true; // Pas encore de frame disponible
+            sharedFrame.copyTo(frame);
+        }
+        
         std::vector<cv::Rect> faces;
         int current_model = configManager.getModelSelection();
         if (current_model == 0) {
