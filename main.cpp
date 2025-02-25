@@ -159,15 +159,30 @@ void setup_app_indicator() {
     app_indicator_set_menu(indicator, GTK_MENU(menu));
 }
 
-int main(int argc, char *argv[]) {    
-
+int main(int argc, char *argv[]) {
+    std::string config_path;
     #ifdef INSTALL_DATA_DIR
-        std::string config_path = std::string(INSTALL_DATA_DIR) + "/simpleautoframer.config.json";
+        // Récupérer le répertoire home de l'utilisateur
+        const char* home_dir = getenv("HOME");
+        if (!home_dir) {
+            std::cerr << "Error: Cannot find HOME directory." << std::endl;
+            return 1;
+        }
+
+        // Construire le chemin de configuration
+        fs::path config_dir = fs::path(home_dir) / ".config" / "simpleautoframer";
+        if (!fs::exists(config_dir)) {
+            fs::create_directories(config_dir);
+            std::cout << "Création du répertoire de configuration : " << config_dir << std::endl;
+        }
+
+        config_path = (config_dir / "simpleautoframer.config.json").string();
     #else
-        std::string config_path = fs::absolute("simpleautoframer.config.json").string();
+        config_path = fs::absolute("simpleautoframer.config.json").string();
     #endif
+
     ProfileManager profileManager(config_path);
-    
+
     auto app = Gtk::Application::create(argc, argv, "org.auto_framer");
 
     // Chargement de l'interface via Glade

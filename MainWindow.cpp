@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "glibmm/ustring.h"
+#include "gtkmm/dialog.h"
 #include "gtkmm/enums.h"
 #include <cstring>
 #include <filesystem>
@@ -25,7 +26,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
     builder->get_widget("main_panned", m_main_panned);
     builder->get_widget("camera_selection", m_camera_selection_combo);
     builder->get_widget("virtual_camera_selection",m_virtual_camera_selection_combo);
-    builder->get_widget("config_box", m_profile_box);
+    builder->get_widget("profile_box", m_profile_box);
     builder->get_widget("new_profile", m_new_profile);
     builder->get_widget("delete_profile", m_delete_profile);
     builder->get_widget("about_menu_item", m_about_menu_item);
@@ -275,6 +276,30 @@ std::vector<std::string> MainWindow::list_video_devices() {
 }
 
 bool MainWindow::on_delete_event(GdkEventAny *any_event) {
+    if (profilesManager->isShowQuitMessage()) {
+        std::string msg = "Simple AutoFramer will now run in the background.\n\nTo quit, right-click the tray icon and select 'Quit'.";
+        // Show a message dialog with the message and a check box for "Don't show this message again"
+        Gtk::MessageDialog dialog(*this, msg, false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK_CANCEL);
+        dialog.set_default_response(Gtk::RESPONSE_OK);
+        dialog.set_modal(true);
+        dialog.set_transient_for(*this);
+
+        Gtk::CheckButton check_button("Don't show this message again");
+        dialog.get_content_area()->pack_end(check_button, false, false);
+        dialog.show_all_children();
+
+        int result = dialog.run();
+        dialog.close();
+        if (result == Gtk::RESPONSE_CANCEL || result == Gtk::RESPONSE_DELETE_EVENT || result == Gtk::RESPONSE_CLOSE) {
+            return true;
+        }
+
+        if (check_button.get_active()) {
+            // Save the user's preference
+            profilesManager->setShowQuitMessage(false);
+        }
+    }
+
     hide();
     return true; // Empêche la fermeture de l'application
 }

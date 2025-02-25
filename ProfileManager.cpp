@@ -6,6 +6,11 @@ ProfileManager::ProfileManager(const std::string& profileFilePath)
     loadProfilesFile();
 }
 
+void ProfileManager::setShowQuitMessage(bool value) {
+    showQuitMessage = value;
+    internalSave();
+}
+
 // Conversion Profile <-> JSON
 nlohmann::json ProfileManager::Profile::toJson() const {
     return {
@@ -116,6 +121,8 @@ void ProfileManager::loadProfilesFile() {
         savedProfiles.push_back(Profile::fromJson(key, value));
     }
 
+    showQuitMessage = j.value("show_quit_message", true);
+
     // Appliquer la dernière profile utilisée
     std::string lastUsed = j.value("last_used", "default");
     auto it = findProfile(lastUsed);
@@ -134,6 +141,7 @@ void ProfileManager::saveProfileFiles() {
 // Helpers privés
 void ProfileManager::internalSave() {
     nlohmann::json j;
+    j["show_quit_message"] = showQuitMessage;
     j["last_used"] = currentProfile->name;
 
     for (const auto& profile : savedProfiles) {

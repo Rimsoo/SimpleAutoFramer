@@ -38,6 +38,7 @@ make install || { echo "Error while installing the project"; exit 1; }
 chmod +x /usr/bin/simpleautoframer
 chmod +x /usr/bin/simpleautoframer-uninstall
 
+gtk-update-icon-cache /usr/share/icons/hicolor
 cd ..
 
 # Delete the build directory

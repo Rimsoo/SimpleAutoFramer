@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(simpleautoframer)
+option(INSTALL_MODE "Enable install mode" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Debug)
@@ -58,8 +59,6 @@ install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E remove
 
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
-
-option(INSTALL_MODE "Enable install mode" OFF)
 
 if(INSTALL_MODE)
     add_compile_definitions(INSTALL_MODE)

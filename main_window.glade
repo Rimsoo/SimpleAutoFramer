@@ -472,7 +472,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBoxText" id="config_box">
+                          <object class="GtkComboBoxText" id="profile_box">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="active">0</property>

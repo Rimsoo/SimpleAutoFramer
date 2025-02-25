@@ -46,6 +46,8 @@ public:
 
     void loadProfilesFile();
     void saveProfileFiles();
+    void setShowQuitMessage(bool value);
+    bool isShowQuitMessage() const { return showQuitMessage; }
 
 private:
     struct Profile {
@@ -70,6 +72,7 @@ private:
     std::string profileFilename;
     Profile* currentProfile = nullptr;
     std::vector<Profile*> savedProfiles;
+    bool showQuitMessage = true;
 
     // Helpers
     void applyProfile(const Profile& profile);
