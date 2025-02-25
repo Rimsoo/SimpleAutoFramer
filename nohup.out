@@ -1,0 +1,14 @@
+[ WARN:0@0,739] global cap_gstreamer.cpp:1777 open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+
+(simpleautoframer:55629): Gtk-CRITICAL **: 22:19:28.752: gtk_main_quit: assertion 'main_loops != NULL' failed
+[ WARN:0@2811,511] global memory.hpp:67 operator() Device memory deallocation failed in deleter.
+OpenCV(4.11.0) /home/rimso/Documents/opencv/opencv-4.11.0/modules/dnn/src/cuda4dnn/csl/memory.hpp:61: error: (-217:Gpu API call) driver shutting down in function 'operator()'
+Exception will be ignored.
+
+[ WARN:0@2811,511] global memory.hpp:67 operator() Device memory deallocation failed in deleter.
+OpenCV(4.11.0) /home/rimso/Documents/opencv/opencv-4.11.0/modules/dnn/src/layers/../cuda4dnn/csl/memory.hpp:61: error: (-217:Gpu API call) driver shutting down in function 'operator()'
+Exception will be ignored.
+
+terminate called after throwing an instance of 'cv::dnn::cuda4dnn::csl::CUDAException'
+  what():  OpenCV(4.11.0) /home/rimso/Documents/opencv/opencv-4.11.0/modules/dnn/src/cuda4dnn/csl/memory.hpp:293: error: (-217:Gpu API call) driver shutting down in function '~MemoryLockGuard'
+

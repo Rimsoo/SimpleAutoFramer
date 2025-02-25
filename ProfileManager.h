@@ -9,18 +9,19 @@
 #include <filesystem>
 #include <algorithm>
 
-class ConfigManager {
+class ProfileManager {
 public:
-    explicit ConfigManager(const std::string& configFilePath);
+    explicit ProfileManager(const std::string& profileFilePath);
     
-    // Gestion des configurations
-    void createConfig(const std::string& name = "default");
-    void deleteConfig(const std::string& name);
-    void switchConfig(const Glib::ustring& name);
-    std::vector<std::string> getConfigList() const;
-    std::string getCurrentConfigName() const { return currentConfig->name; }
+    // Gestion des profils
+    void createProfile(const std::string& name = "default");
+    void deleteProfile(const std::string& name);
+    void switchProfile(const Glib::ustring& name);
+    std::vector<std::string> getProfileList() const;
+    std::string getCurrentProfileName() const { return currentProfile->name; }
+    bool profileExists(const std::string& name) { return findProfile(name) != savedProfiles.end(); }
 
-    // Getters/Setters pour la configuration courante
+    // Getters/Setters pour la profil courante
     // Getters
     int getCameraSelection() const;
     double getSmoothingFactor() const;
@@ -43,11 +44,11 @@ public:
     void setTargetHeight(int value);
     void setVirtualCameraSelection(int value);
 
-    void loadConfig();
-    void saveConfig();
+    void loadProfilesFile();
+    void saveProfileFiles();
 
 private:
-    struct Config {
+    struct Profile {
         // Paramètres
         int camera_selection = 0;
         double smoothing_factor = 0.05;
@@ -62,17 +63,18 @@ private:
 
         // Conversion JSON
         nlohmann::json toJson() const;
-        static Config* fromJson(const nlohmann::json& j);
+        static Profile* fromJson(const std::string& name, const nlohmann::json& j);
     };
 
     mutable std::mutex mutex_;
-    std::string configFilename;
-    Config* currentConfig;
-    std::vector<Config*> savedConfigs;
+    std::string profileFilename;
+    Profile* currentProfile = nullptr;
+    std::vector<Profile*> savedProfiles;
 
     // Helpers
-    void applyConfig(const Config& config);
+    void applyProfile(const Profile& profile);
     void internalSave();
-    Config* getDefaultConfig() const { return new Config(); }
-    std::vector<Config*>::iterator findConfig(const std::string& name);
+    void create(const std::string& name);
+
+    std::vector<Profile*>::iterator findProfile(const std::string& name);
 };

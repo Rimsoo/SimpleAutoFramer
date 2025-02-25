@@ -1,9 +1,10 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "ConfigManager.h"
+#include "ProfileManager.h"
 #include "gtkmm/comboboxtext.h"
 #include "gtkmm/entry.h"
+#include "gtkmm/menuitem.h"
 #include "gtkmm/paned.h"
 #include <gtkmm.h>
 #include <opencv2/opencv.hpp>
@@ -19,7 +20,7 @@ public:
 
     void update_frame(const cv::Mat& frame);
     void show_message(Gtk::MessageType type, const std::string& msg);
-    void setConfigManager(ConfigManager* configManager);
+    void setProfileManager(ProfileManager* configManager);
 
 protected:
     // Structure pour le modèle de ComboBox
@@ -34,7 +35,7 @@ protected:
         Gtk::TreeModelColumn<Glib::ustring> name;
     };
 
-    ConfigManager* configManager;
+    ProfileManager* profilesManager;
     // Widgets
     Gtk::Image* m_video_image;
     Gtk::Paned* m_main_panned;
@@ -47,17 +48,21 @@ protected:
     Gtk::ComboBoxText* m_model_selection_combo;
     Gtk::ComboBoxText* m_camera_selection_combo;
     Gtk::ComboBoxText* m_virtual_camera_selection_combo;
-    Gtk::ComboBoxText* m_config_box;
+    Gtk::ComboBoxText* m_profile_box;
     Gtk::Button* m_apply_button;
-    Gtk::Entry* m_config_name;
+    Gtk::MenuItem* m_new_profile;
+    Gtk::MenuItem* m_delete_profile;
     
     // Modèle pour la ComboBox
     ModelColumns m_columns;
 
     // Méthodes d'initialisation
-    void config_setup();
+    void profiles_setup();
+    void setup_profile_menu_items();
+    void popup_new_profile_dialog();
+    void delete_profile_dialog(const std::string& profile_name);
     void setup_adjustments();
-    void setup_config_box();
+    void setup_profile_box();
     void setup_model_selection();
     void setup_camera_selection(Gtk::ComboBoxText* combo, int current_selection);
     std::vector<std::string> list_video_devices();

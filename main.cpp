@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <string>
 #include <sys/stat.h>
-#include "ConfigManager.h"
+#include "ProfileManager.h"
 #include "MainWindow.h"
 #include "V4l2Output.h"
 #include "V4l2Device.h"
@@ -56,11 +56,11 @@ void capture_loop() {
 }
 
 // Ouvre (ou réouvre) la caméra de capture
-void open_capture_camera(ConfigManager& configManager) {
+void open_capture_camera(ProfileManager& profileManager) {
     if (cap.isOpened())
         cap.release();
     
-    cap.open(configManager.getCameraSelection());
+    cap.open(profileManager.getCameraSelection());
 
     if (!cap.isOpened()) {
         main_window->show_message(Gtk::MESSAGE_ERROR, "Erreur : Impossible d'ouvrir la caméra de capture.\nSelectionnez une autre caméra dans les paramètres.");
@@ -69,9 +69,9 @@ void open_capture_camera(ConfigManager& configManager) {
 }
 
 // Ouvre (ou réouvre) la caméra virtuelle
-void open_virtual_camera(ConfigManager& configManager) 
+void open_virtual_camera(ProfileManager& profileManager) 
 {
-    std::string outputFile = "/dev/video" + std::to_string(configManager.getVirtualCameraSelection());
+    std::string outputFile = "/dev/video" + std::to_string(profileManager.getVirtualCameraSelection());
     if (!fs::exists(outputFile)) {
         main_window->show_message(Gtk::MESSAGE_ERROR, ("Attention : " + std::string(outputFile) + " n'existe pas. Vérifiez v4l2loopback.").c_str());
         return;
@@ -83,18 +83,18 @@ void open_virtual_camera(ConfigManager& configManager)
     videoOutput = nullptr;
 
     V4L2DeviceParameters paramOut(outputFile.c_str(), v4l2_fourcc('B', 'G', 'R', '4'),
-    configManager.getTargetWidth(), configManager.getTargetHeight(), fps, IOTYPE_MMAP);
+    profileManager.getTargetWidth(), profileManager.getTargetHeight(), fps, IOTYPE_MMAP);
     videoOutput = V4l2Output::create(paramOut);
     if (!videoOutput) {
         main_window->show_message(Gtk::MESSAGE_ERROR, ("Erreur : Impossible d'ouvrir la sortie " + std::string(outputFile)).c_str());
         return;
     }
 
-    if (configManager.getTargetWidth() != videoOutput->getWidth() || configManager.getTargetHeight() != videoOutput->getHeight())
+    if (profileManager.getTargetWidth() != videoOutput->getWidth() || profileManager.getTargetHeight() != videoOutput->getHeight())
     {
         main_window->show_message(Gtk::MESSAGE_WARNING, "La résolution demandée n'a pas été appliquée.");
-        configManager.setTargetWidth(videoOutput->getWidth());
-        configManager.setTargetHeight(videoOutput->getHeight());
+        profileManager.setTargetWidth(videoOutput->getWidth());
+        profileManager.setTargetHeight(videoOutput->getHeight());
     }
 }
 
@@ -160,7 +160,13 @@ void setup_app_indicator() {
 }
 
 int main(int argc, char *argv[]) {    
-    ConfigManager configManager("simpleautoframer.config.json");
+
+    #ifdef INSTALL_DATA_DIR
+        std::string config_path = std::string(INSTALL_DATA_DIR) + "/simpleautoframer.config.json";
+    #else
+        std::string config_path = fs::absolute("simpleautoframer.config.json").string();
+    #endif
+    ProfileManager profileManager(config_path);
     
     auto app = Gtk::Application::create(argc, argv, "org.auto_framer");
 
@@ -183,15 +189,15 @@ int main(int argc, char *argv[]) {
         std::cerr << "Erreur : la fenêtre principale n'a pas été trouvée dans le fichier Glade." << std::endl;
         return 1;
     }
-    main_window->setConfigManager(&configManager);
+    main_window->setProfileManager(&profileManager);
 
     gtk_init(nullptr, nullptr);
     setup_app_indicator();
 
-    main_window->signal_camera_changed.connect([&configManager]() {
-        open_capture_camera(configManager); // 42 est le paramètre que vous souhaitez passer
+    main_window->signal_camera_changed.connect([&profileManager]() {
+        open_capture_camera(profileManager); // 42 est le paramètre que vous souhaitez passer
     });
-    open_capture_camera(configManager);
+    open_capture_camera(profileManager);
     capturingRunning = true;
     captureThread = std::thread(capture_loop);
 
@@ -222,11 +228,11 @@ if (!face_cascade.load(cascade_path)) {
         main_window->show_message(Gtk::MESSAGE_WARNING, "Avertissement : Echec de l'initialisation du modèle DNN. Seul le modèle Haar Cascade sera utilisé.");
     }
 
-    main_window->signal_apply_clicked.connect([&configManager](){
-        open_virtual_camera(configManager);
+    main_window->signal_apply_clicked.connect([&profileManager](){
+        open_virtual_camera(profileManager);
     });
     // Ouvrir la caméra virtuelle
-    open_virtual_camera(configManager);
+    open_virtual_camera(profileManager);
 
     // Traitement en boucle (environ toutes les 33ms)
     Glib::signal_timeout().connect([&]() -> bool {
@@ -242,7 +248,7 @@ if (!face_cascade.load(cascade_path)) {
         }
         
         std::vector<cv::Rect> faces;
-        int current_model = configManager.getModelSelection();
+        int current_model = profileManager.getModelSelection();
         if (current_model == 0) {
             // Détection par Haar Cascade (CPU)
             cv::Mat processedBGRA;
@@ -255,7 +261,7 @@ if (!face_cascade.load(cascade_path)) {
                                                   cv::Scalar(104.0, 177.0, 123.0), false, false);
             face_net.setInput(blob);
             cv::Mat detections = face_net.forward();
-            float conf_threshold = configManager.getDetectionConfidence();
+            float conf_threshold = profileManager.getDetectionConfidence();
             
             // Remodélisation de la matrice de détections en 2D (N x 7)
             cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F, detections.ptr<float>());
@@ -278,14 +284,14 @@ if (!face_cascade.load(cascade_path)) {
                 (face.y + face.height / 2.0f) / static_cast<float>(frame.rows)
             );
             cv::Point2f old_center = last_center.load();
-            old_center.x = smoothValue(current_center.x, old_center.x, configManager.getSmoothingFactor());
-            old_center.y = smoothValue(current_center.y, old_center.y, configManager.getSmoothingFactor());
+            old_center.x = smoothValue(current_center.x, old_center.x, profileManager.getSmoothingFactor());
+            old_center.y = smoothValue(current_center.y, old_center.y, profileManager.getSmoothingFactor());
             last_center.store(old_center);
 
             double face_size = std::max(face.width, face.height);
-            double current_zoom = configManager.getZoomBase() + (face_size / static_cast<double>(frame.cols)) * configManager.getZoomMultiplier();
+            double current_zoom = profileManager.getZoomBase() + (face_size / static_cast<double>(frame.cols)) * profileManager.getZoomMultiplier();
             double old_zoom = last_zoom.load();
-            last_zoom.store(smoothValue(current_zoom, old_zoom, configManager.getSmoothingFactor()));
+            last_zoom.store(smoothValue(current_zoom, old_zoom, profileManager.getSmoothingFactor()));
         }
 
         // Calcul de la région de recadrage
@@ -300,7 +306,7 @@ if (!face_cascade.load(cascade_path)) {
         cv::Rect crop_region(x1, y1, x2 - x1, y2 - y1);
         cv::Mat cropped_frame = frame(crop_region);
         cv::Mat processed;
-        cv::resize(cropped_frame, processed, cv::Size(configManager.getTargetWidth(), configManager.getTargetHeight()));
+        cv::resize(cropped_frame, processed, cv::Size(profileManager.getTargetWidth(), profileManager.getTargetHeight()));
 
         cv::Mat processedOutput;
         cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
