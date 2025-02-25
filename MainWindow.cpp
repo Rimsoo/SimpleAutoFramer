@@ -28,13 +28,17 @@ MainWindow::MainWindow(BaseObjectType *cobject,
     builder->get_widget("config_box", m_profile_box);
     builder->get_widget("new_profile", m_new_profile);
     builder->get_widget("delete_profile", m_delete_profile);
+    builder->get_widget("about_menu_item", m_about_menu_item);
+    builder->get_widget("doc_menu_item", m_doc_menu_item);
+    builder->get_widget("switch_view", m_switch_view);
 
     // Vérifier que tous les widgets ont été correctement chargés
     if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
         !m_zoom_scale || !m_zoom_multiplier_scale || !m_confidence_scale ||
         !m_width_spin || !m_height_spin || !m_model_selection_combo ||
         !m_main_panned || !m_camera_selection_combo || !m_virtual_camera_selection_combo ||
-        !m_profile_box || !m_new_profile || !m_delete_profile
+        !m_profile_box || !m_new_profile || !m_delete_profile || !m_about_menu_item ||
+        !m_doc_menu_item || !m_switch_view
     ) {
         std::cerr << "Erreur : certains widgets n'ont pas été trouvés dans le fichier Glade." << std::endl;
         exit(1);
@@ -52,6 +56,18 @@ MainWindow::MainWindow(BaseObjectType *cobject,
     });
     m_apply_button->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::on_apply_clicked));
+    m_about_menu_item->signal_activate().connect([this]() {
+        show_message(Gtk::MESSAGE_INFO, "Simple AutoFramer\nVersion 1.0\n\nAuteur : @Rimsoo");
+    });
+    m_doc_menu_item->signal_activate().connect([this]() {
+        // Ouvrir la documentation dans le navigateur par défaut sur readme.md
+        std::system("xdg-open https://github.com/Rimsoo/SimpleAutoFramer/blob/main/README.md");
+    });
+    m_switch_view->signal_activate().connect([this]() {
+        m_main_panned->get_orientation() == Gtk::ORIENTATION_HORIZONTAL
+            ? m_main_panned->set_orientation(Gtk::ORIENTATION_VERTICAL)
+            : m_main_panned->set_orientation(Gtk::ORIENTATION_HORIZONTAL);
+    });
 
     show_all_children();
 }
@@ -66,6 +82,20 @@ void MainWindow::delete_profile_dialog(const std::string& profile_name) {
         show_message(Gtk::MESSAGE_WARNING, "Warning: Profile name does not exist.");
         return;
     }
+
+    std::string message = "Are you sure you want to delete the profile '" + profile_name + "' ?";
+    if(profilesManager->getProfileList().size() == 1)
+        message += "\n\nWarning: This is the last profile. You will revert to the default profile.";
+    else if(profile_name == profilesManager->getCurrentProfileName())
+        message += "\n\nWarning: The current profile will be switched to the first profile in the list.";
+    Gtk::MessageDialog dialog(*this, message, false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO);
+    dialog.set_default_response(Gtk::RESPONSE_NO);
+
+    int result = dialog.run();
+    dialog.close();
+
+    if (result == Gtk::RESPONSE_NO)
+        return;
 
     profilesManager->deleteProfile(profile_name);
     profiles_setup();

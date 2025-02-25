@@ -48,3 +48,4 @@ sudo simpleautoframe-uninstall
 - [x] GPU support
 - [x] Configuration file
 - [ ] Config shortcuts
+- [ ] Add filters

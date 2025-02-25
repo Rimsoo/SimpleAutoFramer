@@ -52,6 +52,9 @@ protected:
     Gtk::Button* m_apply_button;
     Gtk::MenuItem* m_new_profile;
     Gtk::MenuItem* m_delete_profile;
+    Gtk::MenuItem* m_about_menu_item;
+    Gtk::MenuItem* m_doc_menu_item;
+    Gtk::MenuItem* m_switch_view;
     
     // Modèle pour la ComboBox
     ModelColumns m_columns;

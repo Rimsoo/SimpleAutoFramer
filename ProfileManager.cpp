@@ -71,21 +71,20 @@ void ProfileManager::create(const std::string& name = "default")
 void ProfileManager::deleteProfile(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = findProfile(name);
+    bool isCurrent = false;
     if (it != savedProfiles.end()) {
         if (*it == currentProfile) {
-            if (savedProfiles.size() > 1) {
-                // Sélectionner le premier profil restant différent de celui à supprimer
-                auto it2 = savedProfiles.begin();
-                while (*it2 == currentProfile) {
-                    it2++;
-                }
-                currentProfile = *it2;
-            } else {
-                create();
-            }
+            isCurrent = true;
         }
         savedProfiles.erase(it);
-        internalSave();
+
+        if (savedProfiles.size() > 0) {
+            currentProfile = savedProfiles[0];
+            internalSave();
+        } else {
+            currentProfile = nullptr;
+            create();
+        }
     }
 }
 
