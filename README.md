@@ -18,6 +18,8 @@ Check the [install.sh](install.sh) script for more details.
 
 Tested on Ubuntu 24.04 Gnome only.
 
+## Install
+
 ```bash
 git clone https://github.com/Rimsoo/SimpleAutoFramer.git
 cd SimpleAutoFrame
@@ -32,11 +34,17 @@ simpleautoframe
 simpleautoframe
 ```
 
+## Unsintall
+
+```bash
+sudo simpleautoframe-uninstall
+```
+
 ## TODO
 
 - [x] Installation script
 - [x] XML UI
 - [x] Parametrable model
 - [x] GPU support
-- [ ] Configuration file
+- [x] Configuration file
 - [ ] Config shortcuts
