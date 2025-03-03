@@ -24,6 +24,7 @@
 #include <thread>
 #include <unordered_map>
 #include "HotkeyListener.h" // Needs to be after Glib imports
+#include <boost/algorithm/string.hpp>
 
 namespace fs = std::filesystem;
 
@@ -169,13 +170,13 @@ void setup_shortcuts(ProfileManager *profileManager) {
     KeySym keysym = 0;
 
     for (const auto &part : parts) {
-      if (part == "Ctrl")
+      if (boost::algorithm::to_lower_copy(part).compare("ctrl") == 0)
         modifiers |= ControlMask;
-      else if (part == "Alt")
+      else if (boost::algorithm::to_lower_copy(part).compare("alt") == 0)
         modifiers |= Mod1Mask;
-      else if (part == "Shift")
+      else if (boost::algorithm::to_lower_copy(part).compare("shift") == 0)
         modifiers |= ShiftMask;
-      else if (part == "Super")
+      else if (boost::algorithm::to_lower_copy(part).compare("super") == 0)
         modifiers |= Mod4Mask;
       else
         keysym = XStringToKeysym(part.c_str());

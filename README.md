@@ -1,4 +1,4 @@
-# SimpleAutoFramer C++ 
+# SimpleAutoFramer C++
 
 ## Installation
 
@@ -12,7 +12,7 @@
 - Gtk3
 - ...
 
-Check the [install.sh](install.sh) script for more details.  
+Check the [install.sh](install.sh) script for more details.
 
 ### Instructions
 
@@ -29,6 +29,9 @@ simpleautoframe
 ```
 
 ## Usage
+
+For the shortcuts modifiers, use: ctrl+alt+shift+super+K  
+For the keypad shortcuts, use: KP_Add, KP_Subtract, KP_Multiply, KP_0, KP_1...
 
 ```bash
 simpleautoframe
@@ -47,5 +50,5 @@ sudo simpleautoframe-uninstall
 - [x] Parametrable model
 - [x] GPU support
 - [x] Configuration file
-- [ ] Config shortcuts
+- [x] Config shortcuts
 - [ ] Add filters
