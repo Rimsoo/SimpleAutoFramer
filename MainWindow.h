@@ -17,9 +17,10 @@ public:
              const Glib::RefPtr<Gtk::Builder> &builder);
   virtual ~MainWindow() = default;
 
-  sigc::signal<void> signal_apply_clicked;
+  sigc::signal<void> signal_shortcut_changed;
+  sigc::signal<void> signal_virtual_camera_changed;
   sigc::signal<void> signal_camera_changed;
-  sigc::signal<void> signal_profile_updated;
+  sigc::signal<void> signal_profile_changed;
 
   void update_frame(const cv::Mat &frame);
   void show_message(Gtk::MessageType type, const std::string &msg);
@@ -74,7 +75,6 @@ protected:
   void setup_profile_box();
   void setup_model_selection();
   void setup_camera_selection(Gtk::ComboBoxText *combo, int current_selection);
-  void setup_profils_shortcuts();
 
   std::vector<std::string> list_video_devices();
 

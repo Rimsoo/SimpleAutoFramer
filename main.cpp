@@ -3,6 +3,9 @@
 #include "V4l2Device.h"
 #include "V4l2Output.h"
 #include "gtkmm/enums.h"
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <atomic>
 #include <config.h>
 #include <cstdlib>
@@ -14,9 +17,13 @@
 #include <mutex>
 #include <opencv2/dnn.hpp>
 #include <opencv2/opencv.hpp>
+#include <random>
+#include <sstream>
 #include <string>
 #include <sys/stat.h>
 #include <thread>
+#include <unordered_map>
+#include "HotkeyListener.h" // Needs to be after Glib imports
 
 namespace fs = std::filesystem;
 
@@ -137,6 +144,56 @@ bool file_exists(const std::string &filename) {
 
 // --- AppIndicator ---
 // Configuration de l'indicateur système
+Display *display = nullptr;
+std::map<std::pair<KeyCode, unsigned int>, std::string> shortcut_map;
+
+std::vector<std::string> split(const std::string &s, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream tokenStream(s);
+  while (std::getline(tokenStream, token, delimiter)) {
+    tokens.push_back(token);
+  }
+  return tokens;
+}
+
+void setup_shortcuts(ProfileManager *profileManager) {
+  auto &hotkeys = HotkeyListener::GetInstance();
+
+  for (const auto &profile : profileManager->getProfileList()) {
+    std::vector<std::string> parts = split(profile.shortcut, '+');
+    if (parts.empty())
+      continue;
+
+    unsigned int modifiers = 0;
+    KeySym keysym = 0;
+
+    for (const auto &part : parts) {
+      if (part == "Ctrl")
+        modifiers |= ControlMask;
+      else if (part == "Alt")
+        modifiers |= Mod1Mask;
+      else if (part == "Shift")
+        modifiers |= ShiftMask;
+      else if (part == "Super")
+        modifiers |= Mod4Mask;
+      else
+        keysym = XStringToKeysym(part.c_str());
+    }
+
+    if (keysym != 0) {
+      hotkeys.RegisterHotkey(keysym, modifiers, [=]() {
+        profileManager->switchProfile(profile.name);
+        main_window->profiles_setup();
+        main_window->signal_profile_changed.emit(); 
+      });
+    }
+    else {
+      main_window->show_message(Gtk::MESSAGE_WARNING, "Cannot parse the shortcut : "+profile.shortcut);
+    }
+  }
+}
+
 void setup_app_indicator(ProfileManager *profileManager) {
   static AppIndicator *indicator = nullptr;
   static GtkWidget *menu = nullptr;
@@ -165,14 +222,12 @@ void setup_app_indicator(ProfileManager *profileManager) {
 
   menu = gtk_menu_new();
 
-  // Ajout d'un séparateur avec un label "Profiles"
   GtkWidget *menu_item_label = gtk_menu_item_new_with_label("Profiles");
   gtk_widget_set_sensitive(menu_item_label, FALSE);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_label);
 
   std::string currentProfile = profileManager->getCurrentProfileName();
 
-  // Utilisation de GtkRadioMenuItem pour un seul choix actif
   GSList *radio_group = nullptr;
   for (const auto &profile : profileManager->getProfileList()) {
     GtkWidget *menu_item_profile =
@@ -194,18 +249,17 @@ void setup_app_indicator(ProfileManager *profileManager) {
               g_object_get_data(G_OBJECT(item), "profile-name"));
           if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) {
             manager->switchProfile(profileName);
-          }
+           main_window->profiles_setup();
+        }
         }),
         profileManager);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_profile);
   }
 
-  // Séparateur visuel
   GtkWidget *separator = gtk_separator_menu_item_new();
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), separator);
 
-  // Bouton "Show"
   GtkWidget *menu_item_show = gtk_menu_item_new_with_label("Show");
   g_signal_connect(menu_item_show, "activate",
                    G_CALLBACK(+[](GtkMenuItem *, gpointer data) {
@@ -215,7 +269,6 @@ void setup_app_indicator(ProfileManager *profileManager) {
                    main_window);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_show);
 
-  // Bouton "Quit"
   GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
   g_signal_connect(menu_item_quit, "activate",
                    G_CALLBACK(+[](GtkMenuItem *, gpointer) {
@@ -285,8 +338,10 @@ int main(int argc, char *argv[]) {
   gtk_init(nullptr, nullptr);
   setup_app_indicator(&profileManager);
 
-  main_window->signal_profile_updated.connect(
-      [&profileManager]() { setup_app_indicator(&profileManager); });
+  main_window->signal_profile_changed.connect(
+      [&profileManager]() { 
+      setup_app_indicator(&profileManager); 
+    });
 
   main_window->signal_camera_changed.connect([&profileManager]() {
     open_capture_camera(
@@ -333,10 +388,16 @@ int main(int argc, char *argv[]) {
         "modèle Haar Cascade sera utilisé.");
   }
 
-  main_window->signal_apply_clicked.connect(
+  main_window->signal_virtual_camera_changed.connect(
       [&profileManager]() { open_virtual_camera(profileManager); });
   // Ouvrir la caméra virtuelle
   open_virtual_camera(profileManager);
+
+  // Setup des raccourcis clavier
+  setup_shortcuts(&profileManager);
+  main_window->signal_shortcut_changed.connect(
+      [&profileManager]() { setup_shortcuts(&profileManager); });
+
 
   // Traitement en boucle (environ toutes les 33ms)
   Glib::signal_timeout().connect(

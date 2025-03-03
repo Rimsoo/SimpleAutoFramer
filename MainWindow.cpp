@@ -1,6 +1,6 @@
 #include "MainWindow.h"
+#include "gdk/gdkx.h"
 #include "glibmm/ustring.h"
-#include "gtk/gtk.h"
 #include "gtkmm/dialog.h"
 #include "gtkmm/enums.h"
 #include <cstring>
@@ -11,6 +11,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+#include "HotkeyListener.h"
 MainWindow::MainWindow(BaseObjectType *cobject,
                        const Glib::RefPtr<Gtk::Builder> &builder)
     : Gtk::Window(cobject) {
@@ -35,7 +36,8 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("doc_menu_item", m_doc_menu_item);
   builder->get_widget("switch_view", m_switch_view);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
-
+  HotkeyListener::GetInstance().Init(
+      gdk_x11_display_get_xdisplay(gdk_display_get_default()));
   // Vérifier que tous les widgets ont été correctement chargés
   if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
       !m_zoom_scale || !m_zoom_multiplier_scale || !m_confidence_scale ||
@@ -112,7 +114,7 @@ void MainWindow::delete_profile_dialog(const std::string &profile_name) {
 
   profilesManager->deleteProfile(profile_name);
   profiles_setup();
-  signal_profile_updated.emit();
+  signal_profile_changed.emit();
 }
 
 void MainWindow::popup_new_profile_dialog() {
@@ -147,7 +149,7 @@ void MainWindow::popup_new_profile_dialog() {
 
   profilesManager->createProfile(new_profile_name);
   profiles_setup();
-  signal_profile_updated.emit();
+  signal_profile_changed.emit();
 }
 
 void MainWindow::setProfileManager(ProfileManager *profileManager) {
@@ -169,11 +171,7 @@ void MainWindow::profiles_setup() {
   m_width_spin->set_value(profilesManager->getTargetWidth());
   m_height_spin->set_value(profilesManager->getTargetHeight());
   m_shortcut_entry->set_text(profilesManager->getShortcut());
-
-  setup_profils_shortcuts();
 }
-
-void MainWindow::setup_profils_shortcuts() {}
 
 void MainWindow::setup_profile_menu_items() {
   // Détruire l'ancien sous-menu
@@ -208,14 +206,6 @@ void MainWindow::setup_profile_box() {
   auto store = Gtk::ListStore::create(m_columns);
   auto profiles = profilesManager->getProfileList();
 
-  auto accelGroup = Gtk::AccelGroup::create();
-
-  if (!get_accel_groups().empty()) {
-    remove_accel_group(get_accel_groups()[0]);
-  }
-
-  add_accel_group(accelGroup);
-
   Gtk::TreeModel::Row active_iter;
   for (size_t i = 0; i < profiles.size(); ++i) {
     Gtk::TreeModel::Row row = *store->append();
@@ -224,24 +214,6 @@ void MainWindow::setup_profile_box() {
 
     if (profiles[i].name == profilesManager->getCurrentProfileName()) {
       active_iter = row;
-    }
-
-    const auto &sc = profiles[i].shortcut;
-    if (!sc.empty()) {
-
-      guint key = 0;
-      Gdk::ModifierType mods = Gdk::ModifierType(0);
-
-      // Parse "Ctrl+P" etc. via la fonction GTK
-      accelGroup->parse(sc, key, mods);
-
-      if (key != 0) {
-        // add_accelerator(std::string(i), accelGroup, key, mods, 0);
-
-      } else {
-        std::cerr << "Erreur : impossible de parser le raccourci " << sc
-                  << std::endl;
-      }
     }
   }
 
@@ -258,6 +230,7 @@ void MainWindow::setup_profile_box() {
       auto name = active_iter->get_value(m_columns.name);
       profilesManager->switchProfile(name);
       profiles_setup();
+      signal_profile_changed.emit();
     }
   });
 }
@@ -412,7 +385,6 @@ void MainWindow::on_apply_clicked() {
   profilesManager->setSmoothingFactor(m_smoothing_scale->get_value());
   profilesManager->setDetectionConfidence(m_confidence_scale->get_value());
   profilesManager->setZoomMultiplier(m_zoom_multiplier_scale->get_value());
-  profilesManager->setShortcut(m_shortcut_entry->get_text());
 
   auto vcam_id =
       (*m_virtual_camera_selection_combo->get_active())[m_columns.id];
@@ -434,20 +406,24 @@ void MainWindow::on_apply_clicked() {
 
   profilesManager->setModelSelection(
       (*m_model_selection_combo->get_active())[m_columns.id]);
+  bool shortcut_changed =
+      profilesManager->getShortcut() != m_shortcut_entry->get_text();
+  profilesManager->setShortcut(m_shortcut_entry->get_text());
 
   if (reload_virtual_camera) {
-    signal_apply_clicked.emit();
+    signal_virtual_camera_changed.emit();
     m_width_spin->set_value(profilesManager->getTargetWidth());
     m_height_spin->set_value(profilesManager->getTargetHeight());
   }
   if (reload_camera) {
     signal_camera_changed.emit();
   }
+  if (shortcut_changed) {
+    signal_shortcut_changed.emit();
+  }
 
   profilesManager->saveProfileFiles();
   profiles_setup();
-
-  signal_profile_updated.emit();
 }
 
 void MainWindow::show_message(Gtk::MessageType type, const std::string &msg) {

@@ -14,13 +14,22 @@ pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
 
 include_directories(${GTKMM_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
 
-add_executable(simpleautoframer main.cpp MainWindow.cpp ProfileManager.cpp)
+add_executable(simpleautoframer main.cpp MainWindow.cpp ProfileManager.cpp HotkeyListener.cpp)
 
 # Ajouter le sous dossier libv4l2cpp
 add_subdirectory(libv4l2cpp EXCLUDE_FROM_ALL)
 target_include_directories(simpleautoframer PUBLIC libv4l2cpp/inc)
+find_package(PkgConfig REQUIRED)
 
-target_link_libraries(simpleautoframer PRIVATE ${OpenCV_LIBS} ${GTKMM_LIBRARIES} ${APPINDICATOR_LIBRARIES} libv4l2cpp ${LIBRARIES})
+# Utiliser pkg-config pour localiser X11 et XInput2
+pkg_check_modules(X11 REQUIRED x11)
+pkg_check_modules(XINPUT2 REQUIRED xi)
+
+# Ajouter les chemins d'inclusion
+include_directories(${X11_INCLUDE_DIRS})
+include_directories(${XINPUT2_INCLUDE_DIRS})
+
+target_link_libraries(simpleautoframer PRIVATE  ${X11_LIBRARIES} ${XINPUT2_LIBRARIES} ${OpenCV_LIBS} ${GTKMM_LIBRARIES} ${APPINDICATOR_LIBRARIES} libv4l2cpp ${LIBRARIES})
 
 # Copier les fichiers nécessaires dans le dossier de build
 file(COPY haarcascade_frontalface_default.xml DESTINATION ${CMAKE_BINARY_DIR})
