@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(simpleautoframer)
-option(INSTALL_MODE "Enable install mode" ON)
+option(INSTALL_MODE "Enable install mode" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_PREFIX_PATH "/usr")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -15,7 +16,7 @@ include_directories(${GTKMM_INCLUDE_DIRS} ${APPINDICATOR_INCLUDE_DIRS})
 
 add_executable(simpleautoframer main.cpp MainWindow.cpp ProfileManager.cpp)
 
-# Ajouter le sous dossier libv4l2cpp 
+# Ajouter le sous dossier libv4l2cpp
 add_subdirectory(libv4l2cpp EXCLUDE_FROM_ALL)
 target_include_directories(simpleautoframer PUBLIC libv4l2cpp/inc)
 
@@ -49,17 +50,17 @@ install(FILES simpleautoframer.desktop
 # Installer le fichier .icon
 install(FILES icon.png
         DESTINATION /usr/share/icons/hicolor/64x64/apps)
-install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E copy 
-    \"/usr/share/icons/hicolor/64x64/apps/icon.png\" 
+install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E copy
+    \"/usr/share/icons/hicolor/64x64/apps/icon.png\"
     \"/usr/share/icons/hicolor/64x64/apps/simpleautoframer.png\")")
 
 # Supprimer icon.png
-install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E remove 
+install(CODE "execute_process(COMMAND \${CMAKE_COMMAND} -E remove
     \"/usr/share/icons/hicolor/64x64/apps/icon.png\")")
 
 configure_file(config.h.in config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
 
 if(INSTALL_MODE)
-    add_compile_definitions(INSTALL_MODE)
+  add_compile_definitions(INSTALL_MODE)
 endif()
