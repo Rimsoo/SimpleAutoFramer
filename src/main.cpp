@@ -1,12 +1,13 @@
-#include "MainWindow.h"
-#include "ProfileManager.h"
 #include "V4l2Device.h"
 #include "V4l2Output.h"
+#include "common/ProfileManager.h"
 #include "gtkmm/enums.h"
+#include "gui/MainWindow.h"
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <atomic>
+#include <boost/algorithm/string.hpp>
 #include <config.h>
 #include <cstdlib>
 #include <filesystem>
@@ -23,8 +24,8 @@
 #include <sys/stat.h>
 #include <thread>
 #include <unordered_map>
+
 #include "HotkeyListener.h" // Needs to be after Glib imports
-#include <boost/algorithm/string.hpp>
 
 namespace fs = std::filesystem;
 
@@ -186,11 +187,12 @@ void setup_shortcuts(ProfileManager *profileManager) {
       hotkeys.RegisterHotkey(keysym, modifiers, [=]() {
         profileManager->switchProfile(profile.name);
         main_window->profiles_setup();
-        main_window->signal_profile_changed.emit(); 
+        main_window->signal_profile_changed.emit();
       });
-    }
-    else {
-      main_window->show_message(Gtk::MESSAGE_WARNING, "Cannot parse the shortcut : "+profile.shortcut);
+    } else {
+      main_window->show_message(Gtk::MESSAGE_WARNING,
+                                "Cannot parse the shortcut : " +
+                                    profile.shortcut);
     }
   }
 }
@@ -200,9 +202,10 @@ void setup_app_indicator(ProfileManager *profileManager) {
   static GtkWidget *menu = nullptr;
 
 #ifdef INSTALL_DATA_DIR
-  std::string icon_path = std::string(INSTALL_DATA_DIR) + "/icon.png";
+  std::string icon_path =
+      std::string(INSTALL_DATA_DIR) + "/simpleautoframer.png";
 #else
-  std::string icon_path = fs::absolute("icon.png").string();
+  std::string icon_path = fs::absolute("simpleautoframer.png").string();
 #endif
 
   if (!fs::exists(icon_path)) {
@@ -250,8 +253,8 @@ void setup_app_indicator(ProfileManager *profileManager) {
               g_object_get_data(G_OBJECT(item), "profile-name"));
           if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) {
             manager->switchProfile(profileName);
-           main_window->profiles_setup();
-        }
+            main_window->profiles_setup();
+          }
         }),
         profileManager);
 
@@ -340,9 +343,7 @@ int main(int argc, char *argv[]) {
   setup_app_indicator(&profileManager);
 
   main_window->signal_profile_changed.connect(
-      [&profileManager]() { 
-      setup_app_indicator(&profileManager); 
-    });
+      [&profileManager]() { setup_app_indicator(&profileManager); });
 
   main_window->signal_camera_changed.connect([&profileManager]() {
     open_capture_camera(
@@ -398,7 +399,6 @@ int main(int argc, char *argv[]) {
   setup_shortcuts(&profileManager);
   main_window->signal_shortcut_changed.connect(
       [&profileManager]() { setup_shortcuts(&profileManager); });
-
 
   // Traitement en boucle (environ toutes les 33ms)
   Glib::signal_timeout().connect(
