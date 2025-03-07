@@ -4,7 +4,6 @@
 #include "HotkeyListener.h"
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
-#include <iostream>
 
 #include "gdk/gdkx.h"
 HotkeyListener &HotkeyListener::GetInstance() {

@@ -2,13 +2,30 @@
 #define MAINWINDOW_H
 
 #include "ProfileManager.h"
-#include "gtkmm/accelgroup.h"
+#include "glibmm/ustring.h"
 #include "gtkmm/comboboxtext.h"
 #include "gtkmm/entry.h"
+#include "gtkmm/enums.h"
 #include "gtkmm/menuitem.h"
 #include "gtkmm/paned.h"
+#include <boost/algorithm/string.hpp>
+#include <config.h>
+#include <cstdlib>
+#include <cstring>
+#include <gdkmm/pixbuf.h>
+#include <gtk/gtk.h>
 #include <gtkmm.h>
+#include <gtkmm/application.h>
+#include <libayatana-appindicator/app-indicator.h>
+#include <opencv2/dnn.hpp>
 #include <opencv2/opencv.hpp>
+#include <string>
+#include <sys/stat.h>
+#include <vector>
+
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 class MainWindow : public Gtk::Window {
 
@@ -17,16 +34,16 @@ public:
              const Glib::RefPtr<Gtk::Builder> &builder);
   virtual ~MainWindow() = default;
 
-  sigc::signal<void> signal_shortcut_changed;
-  sigc::signal<void> signal_virtual_camera_changed;
-  sigc::signal<void> signal_camera_changed;
-  sigc::signal<void> signal_profile_changed;
+  sigc::signal<void> signalShortcutChanged;
+  sigc::signal<void> signalVirtualCameraChanged;
+  sigc::signal<void> signalCameraChanged;
+  sigc::signal<void> signalProfileChanged;
 
-  void update_frame(const cv::Mat &frame);
-  void show_message(Gtk::MessageType type, const std::string &msg);
+  void updateFrame(const cv::Mat &frame);
+  void showMessage(Gtk::MessageType type, const std::string &msg);
   void setProfileManager(ProfileManager *configManager);
   ProfileManager *getProfileManager() { return profilesManager; }
-  void profiles_setup();
+  void profilesSetup();
 
 protected:
   // Structure pour le modèle de ComboBox
@@ -41,6 +58,8 @@ protected:
     Gtk::TreeModelColumn<Glib::ustring> name;
   };
 
+  Display *display = nullptr;
+  std::map<std::pair<KeyCode, unsigned int>, std::string> shortcutMap;
   ProfileManager *profilesManager;
   // Widgets
   Gtk::Image *m_video_image;
@@ -68,19 +87,21 @@ protected:
   ModelColumns m_columns;
 
   // Méthodes d'initialisation
-  void setup_profile_menu_items();
-  void popup_new_profile_dialog();
-  void delete_profile_dialog(const std::string &profile_name);
-  void setup_adjustments();
-  void setup_profile_box();
-  void setup_model_selection();
-  void setup_camera_selection(Gtk::ComboBoxText *combo, int current_selection);
+  void setupProfileMenuItems();
+  void popupNewProfileDialog();
+  void deleteProfileDialog(const std::string &profileName);
+  void setupAdjustments();
+  void setupProfileBox();
+  void setupModelSelection();
+  void setupCameraSelection(Gtk::ComboBoxText *combo, int currentSelection);
 
-  std::vector<std::string> list_video_devices();
+  std::vector<std::string> listVideoDevices();
 
+  void setupShortcuts();
+  void setupAppIndicator();
   // Gestionnaires de signaux
-  bool on_delete_event(GdkEventAny *any_event) override;
-  void on_apply_clicked();
+  bool on_delete_event(GdkEventAny *anyEvent) override;
+  void onApplyClicked();
 };
 
 #endif // MAINWINDOW_H

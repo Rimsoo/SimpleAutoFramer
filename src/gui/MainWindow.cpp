@@ -1,17 +1,12 @@
 #include "MainWindow.h"
 #include "gdk/gdkx.h"
-#include "glibmm/ustring.h"
-#include "gtkmm/dialog.h"
-#include "gtkmm/enums.h"
-#include <cstring>
 #include <filesystem>
-#include <gdkmm/pixbuf.h>
 #include <iostream>
-#include <new>
-#include <opencv2/opencv.hpp>
-#include <vector>
 
 #include "HotkeyListener.h"
+
+namespace fs = std::filesystem;
+
 MainWindow::MainWindow(BaseObjectType *cobject,
                        const Glib::RefPtr<Gtk::Builder> &builder)
     : Gtk::Window(cobject) {
@@ -60,12 +55,12 @@ MainWindow::MainWindow(BaseObjectType *cobject,
 
   // Connecter les signaux
   m_new_profile->signal_activate().connect(
-      [this]() { popup_new_profile_dialog(); });
+      [this]() { popupNewProfileDialog(); });
   m_apply_button->signal_clicked().connect(
-      sigc::mem_fun(*this, &MainWindow::on_apply_clicked));
+      sigc::mem_fun(*this, &MainWindow::onApplyClicked));
   m_about_menu_item->signal_activate().connect([this]() {
-    show_message(Gtk::MESSAGE_INFO,
-                 "Simple AutoFramer\nVersion 1.0\n\nAuteur : @Rimsoo");
+    showMessage(Gtk::MESSAGE_INFO,
+                "Simple AutoFramer\nVersion 1.0\n\nAuteur : @Rimsoo");
   });
   m_doc_menu_item->signal_activate().connect([this]() {
     // Ouvrir la documentation dans le navigateur par défaut sur readme.md
@@ -82,15 +77,14 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   show_all_children();
 }
 
-void MainWindow::delete_profile_dialog(const std::string &profile_name) {
+void MainWindow::deleteProfileDialog(const std::string &profile_name) {
 
   if (profile_name.empty()) {
-    show_message(Gtk::MESSAGE_WARNING,
-                 "Warning: Profile name cannot be empty.");
+    showMessage(Gtk::MESSAGE_WARNING, "Warning: Profile name cannot be empty.");
     return;
   }
   if (!profilesManager->profileExists(profile_name)) {
-    show_message(Gtk::MESSAGE_WARNING, "Warning: Profile name does not exist.");
+    showMessage(Gtk::MESSAGE_WARNING, "Warning: Profile name does not exist.");
     return;
   }
 
@@ -113,11 +107,11 @@ void MainWindow::delete_profile_dialog(const std::string &profile_name) {
     return;
 
   profilesManager->deleteProfile(profile_name);
-  profiles_setup();
-  signal_profile_changed.emit();
+  profilesSetup();
+  signalProfileChanged.emit();
 }
 
-void MainWindow::popup_new_profile_dialog() {
+void MainWindow::popupNewProfileDialog() {
   std::string new_profile_name;
   Gtk::MessageDialog dialog(*this, "New profile", false, Gtk::MESSAGE_QUESTION,
                             Gtk::BUTTONS_OK_CANCEL);
@@ -139,41 +133,47 @@ void MainWindow::popup_new_profile_dialog() {
     return;
 
   if (new_profile_name.empty()) {
-    show_message(Gtk::MESSAGE_WARNING,
-                 "Warning: Profile name cannot be empty.");
+    showMessage(Gtk::MESSAGE_WARNING, "Warning: Profile name cannot be empty.");
     return m_new_profile->activate();
   } else if (profilesManager->profileExists(new_profile_name)) {
-    show_message(Gtk::MESSAGE_WARNING, "Warning: Profile name already exists.");
+    showMessage(Gtk::MESSAGE_WARNING, "Warning: Profile name already exists.");
     return m_new_profile->activate();
   }
 
   profilesManager->createProfile(new_profile_name);
-  profiles_setup();
-  signal_profile_changed.emit();
+  profilesSetup();
+  signalProfileChanged.emit();
 }
 
 void MainWindow::setProfileManager(ProfileManager *profileManager) {
   this->profilesManager = profileManager;
 
-  profiles_setup();
+  setupAppIndicator();
+  signalProfileChanged.connect([this]() { setupAppIndicator(); });
+
+  // Setup des raccourcis clavier
+  setupShortcuts();
+  signalShortcutChanged.connect([this]() { setupShortcuts(); });
+
+  profilesSetup();
 }
 
-void MainWindow::profiles_setup() {
-  setup_profile_menu_items();
-  setup_profile_box();
-  setup_adjustments();
-  setup_model_selection();
-  setup_camera_selection(m_camera_selection_combo,
-                         profilesManager->getCameraSelection());
-  setup_camera_selection(m_virtual_camera_selection_combo,
-                         profilesManager->getVirtualCameraSelection());
+void MainWindow::profilesSetup() {
+  setupProfileMenuItems();
+  setupProfileBox();
+  setupAdjustments();
+  setupModelSelection();
+  setupCameraSelection(m_camera_selection_combo,
+                       profilesManager->getCameraSelection());
+  setupCameraSelection(m_virtual_camera_selection_combo,
+                       profilesManager->getVirtualCameraSelection());
 
   m_width_spin->set_value(profilesManager->getTargetWidth());
   m_height_spin->set_value(profilesManager->getTargetHeight());
   m_shortcut_entry->set_text(profilesManager->getShortcut());
 }
 
-void MainWindow::setup_profile_menu_items() {
+void MainWindow::setupProfileMenuItems() {
   // Détruire l'ancien sous-menu
   if (m_delete_profile->has_submenu()) {
     auto old_sub_menu = m_delete_profile->get_submenu();
@@ -193,7 +193,7 @@ void MainWindow::setup_profile_menu_items() {
         Gtk::manage(new Gtk::MenuItem(Glib::ustring(profile.name)));
     item->signal_activate().connect(
         [this, label = Glib::ustring(profile.name)]() {
-          delete_profile_dialog(label);
+          deleteProfileDialog(label);
         });
     sub_menu->append(*item);
   }
@@ -202,7 +202,7 @@ void MainWindow::setup_profile_menu_items() {
   sub_menu->show_all();
 }
 
-void MainWindow::setup_profile_box() {
+void MainWindow::setupProfileBox() {
   auto store = Gtk::ListStore::create(m_columns);
   auto profiles = profilesManager->getProfileList();
 
@@ -229,13 +229,13 @@ void MainWindow::setup_profile_box() {
                            active_iter->get_value(m_columns.name)) {
       auto name = active_iter->get_value(m_columns.name);
       profilesManager->switchProfile(name);
-      profiles_setup();
-      signal_profile_changed.emit();
+      profilesSetup();
+      signalProfileChanged.emit();
     }
   });
 }
 
-void MainWindow::setup_adjustments() {
+void MainWindow::setupAdjustments() {
   auto setup_scale = [](Gtk::Scale *scale, double min, double max, double step,
                         double value) {
     auto adj = scale->get_adjustment();
@@ -259,7 +259,7 @@ void MainWindow::setup_adjustments() {
                                              240, 2160, 1, 10, 0);
 }
 
-void MainWindow::setup_model_selection() {
+void MainWindow::setupModelSelection() {
   Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
   Gtk::TreeModel::Row row = *store->append();
   row[m_columns.name] = "Haar Cascade (CPU)";
@@ -272,14 +272,14 @@ void MainWindow::setup_model_selection() {
   m_model_selection_combo->set_active(profilesManager->getModelSelection());
 }
 
-void MainWindow::setup_camera_selection(Gtk::ComboBoxText *combo,
-                                        int current_selection) {
+void MainWindow::setupCameraSelection(Gtk::ComboBoxText *combo,
+                                      int current_selection) {
   Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
 
   combo->set_model(store);
 
   Gtk::TreeModel::Row active_iter;
-  auto devices = list_video_devices();
+  auto devices = listVideoDevices();
   for (const auto &device : devices) {
     // Extraire l'ID numérique du périphérique, par exemple "/dev/video3" -> 3
     int id = std::stoi(device.substr(std::string("/dev/video").length()));
@@ -293,7 +293,7 @@ void MainWindow::setup_camera_selection(Gtk::ComboBoxText *combo,
   }
 }
 
-std::vector<std::string> MainWindow::list_video_devices() {
+std::vector<std::string> MainWindow::listVideoDevices() {
   std::vector<std::string> devices;
   for (const auto &entry : std::filesystem::directory_iterator("/dev")) {
     std::string filename = entry.path().filename().string();
@@ -306,7 +306,7 @@ std::vector<std::string> MainWindow::list_video_devices() {
   return devices;
 }
 
-bool MainWindow::on_delete_event(GdkEventAny *any_event) {
+bool MainWindow::on_delete_event(GdkEventAny *anyEvent) {
   if (profilesManager->isShowQuitMessage()) {
     std::string msg = "Simple AutoFramer will now run in the background.\n\nTo "
                       "quit, right-click the tray icon and select 'Quit'.";
@@ -339,7 +339,7 @@ bool MainWindow::on_delete_event(GdkEventAny *any_event) {
   return true; // Empêche la fermeture de l'application
 }
 
-void MainWindow::update_frame(const cv::Mat &frame) {
+void MainWindow::updateFrame(const cv::Mat &frame) {
   if (!is_visible())
     return;
   cv::Mat rgb_frame;
@@ -380,7 +380,7 @@ void MainWindow::update_frame(const cv::Mat &frame) {
     std::cerr << "Erreur : m_video_image n'est pas initialisé." << std::endl;
 }
 
-void MainWindow::on_apply_clicked() {
+void MainWindow::onApplyClicked() {
   profilesManager->setZoomBase(m_zoom_scale->get_value());
   profilesManager->setSmoothingFactor(m_smoothing_scale->get_value());
   profilesManager->setDetectionConfidence(m_confidence_scale->get_value());
@@ -411,22 +411,159 @@ void MainWindow::on_apply_clicked() {
   profilesManager->setShortcut(m_shortcut_entry->get_text());
 
   if (reload_virtual_camera) {
-    signal_virtual_camera_changed.emit();
+    signalVirtualCameraChanged.emit();
     m_width_spin->set_value(profilesManager->getTargetWidth());
     m_height_spin->set_value(profilesManager->getTargetHeight());
   }
   if (reload_camera) {
-    signal_camera_changed.emit();
+    signalCameraChanged.emit();
   }
   if (shortcut_changed) {
-    signal_shortcut_changed.emit();
+    signalShortcutChanged.emit();
   }
 
   profilesManager->saveProfileFiles();
-  profiles_setup();
+  profilesSetup();
 }
 
-void MainWindow::show_message(Gtk::MessageType type, const std::string &msg) {
+void MainWindow::showMessage(Gtk::MessageType type, const std::string &msg) {
   Gtk::MessageDialog dialog(*this, msg, false, type, Gtk::BUTTONS_OK);
   dialog.run();
+}
+
+void MainWindow::setupAppIndicator() {
+  static AppIndicator *indicator = nullptr;
+  static GtkWidget *menu = nullptr;
+
+#ifdef INSTALL_DATA_DIR
+  std::string icon_path =
+      std::string(INSTALL_DATA_DIR) + "/simpleautoframer.png";
+#else
+  std::string icon_path = fs::absolute("simpleautoframer.png").string();
+#endif
+
+  if (!fs::exists(icon_path)) {
+    showMessage(Gtk::MESSAGE_ERROR, "Erreur : Fichier icône non trouvé.");
+    return;
+  }
+
+  if (!indicator) {
+    indicator = app_indicator_new("simple_auto_framer", icon_path.c_str(),
+                                  APP_INDICATOR_CATEGORY_SYSTEM_SERVICES);
+    app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE);
+  }
+
+  if (menu) {
+    gtk_widget_destroy(menu);
+  }
+
+  menu = gtk_menu_new();
+
+  GtkWidget *menu_item_label = gtk_menu_item_new_with_label("Profiles");
+  gtk_widget_set_sensitive(menu_item_label, FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_label);
+
+  std::string currentProfile = profilesManager->getCurrentProfileName();
+
+  GSList *radio_group = nullptr;
+  for (const auto &profile : profilesManager->getProfileList()) {
+    GtkWidget *menu_item_profile =
+        gtk_radio_menu_item_new_with_label(radio_group, profile.name.c_str());
+    radio_group =
+        gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(menu_item_profile));
+
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item_profile),
+                                   profile.name == currentProfile);
+
+    g_object_set_data_full(G_OBJECT(menu_item_profile), "profile-name",
+                           g_strdup(profile.name.c_str()), g_free);
+
+    g_signal_connect(
+        menu_item_profile, "activate",
+        G_CALLBACK(+[](GtkMenuItem *item, gpointer data) {
+          auto win = static_cast<MainWindow *>(data);
+          ProfileManager *manager = win->getProfileManager();
+          const char *profileName = static_cast<const char *>(
+              g_object_get_data(G_OBJECT(item), "profile-name"));
+          if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) {
+            manager->switchProfile(profileName);
+            win->profilesSetup();
+          }
+        }),
+        this);
+
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_profile);
+  }
+
+  GtkWidget *separator = gtk_separator_menu_item_new();
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), separator);
+
+  GtkWidget *menu_item_show = gtk_menu_item_new_with_label("Show");
+  g_signal_connect(menu_item_show, "activate",
+                   G_CALLBACK(+[](GtkMenuItem *, gpointer data) {
+                     MainWindow *win = static_cast<MainWindow *>(data);
+                     win->present();
+                   }),
+                   this);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_show);
+
+  GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
+  g_signal_connect(menu_item_quit, "activate",
+                   G_CALLBACK(+[](GtkMenuItem *, gpointer) {
+                     //   close_all();
+                     gtk_main_quit();
+                     exit(0);
+                   }),
+                   nullptr);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_quit);
+
+  gtk_widget_show_all(menu);
+  app_indicator_set_menu(indicator, GTK_MENU(menu));
+}
+
+std::vector<std::string> split(const std::string &s, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream tokenStream(s);
+  while (std::getline(tokenStream, token, delimiter)) {
+    tokens.push_back(token);
+  }
+  return tokens;
+}
+
+void MainWindow::setupShortcuts() {
+  auto &hotkeys = HotkeyListener::GetInstance();
+
+  for (const auto &profile : profilesManager->getProfileList()) {
+    std::vector<std::string> parts = split(profile.shortcut, '+');
+    if (parts.empty())
+      continue;
+
+    unsigned int modifiers = 0;
+    KeySym keysym = 0;
+
+    for (const auto &part : parts) {
+      if (boost::algorithm::to_lower_copy(part).compare("ctrl") == 0)
+        modifiers |= ControlMask;
+      else if (boost::algorithm::to_lower_copy(part).compare("alt") == 0)
+        modifiers |= Mod1Mask;
+      else if (boost::algorithm::to_lower_copy(part).compare("shift") == 0)
+        modifiers |= ShiftMask;
+      else if (boost::algorithm::to_lower_copy(part).compare("super") == 0)
+        modifiers |= Mod4Mask;
+      else
+        keysym = XStringToKeysym(part.c_str());
+    }
+
+    if (keysym != 0) {
+      hotkeys.RegisterHotkey(keysym, modifiers, [=]() {
+        profilesManager->switchProfile(profile.name);
+        profilesSetup();
+        signalProfileChanged.emit();
+      });
+    } else {
+      showMessage(Gtk::MESSAGE_WARNING,
+                  "Cannot parse the shortcut : " + profile.shortcut);
+    }
+  }
 }

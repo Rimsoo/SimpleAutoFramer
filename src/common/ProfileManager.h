@@ -1,9 +1,6 @@
 #pragma once
 
-#include "glibmm/ustring.h"
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
+#include <config.h>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -11,7 +8,7 @@
 
 class ProfileManager {
 public:
-  explicit ProfileManager(const std::string &profileFilePath);
+  explicit ProfileManager();
 
   struct Profile {
     // Paramètres
@@ -34,7 +31,7 @@ public:
   // Gestion des profils
   void createProfile(const std::string &name = "default");
   void deleteProfile(const std::string &name);
-  void switchProfile(const Glib::ustring &name);
+  void switchProfile(const std::string &name);
   std::vector<Profile> getProfileList() const;
   std::string getCurrentProfileName() const { return currentProfile->name; }
   bool profileExists(const std::string &name) {

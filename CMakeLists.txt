@@ -70,8 +70,8 @@ install(TARGETS simpleautoframer
         RUNTIME DESTINATION /usr/bin)
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall
-        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ
-        DESTINATION /usr/bin)
+        PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE
+        GROUP_READ WORLD_EXECUTE WORLD_READ DESTINATION /usr/bin)
 
 # Installer les fichiers ressources dans /usr/share/simpleautoframer
 install(FILES
@@ -92,7 +92,8 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
         DESTINATION /usr/share/icons/hicolor/64x64/apps)
 
 # --- Configuration du fichier config.h ---
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_BINARY_DIR}/config.h @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in
+        ${CMAKE_BINARY_DIR}/config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
 
 # --- Définition de la compilation en mode install si activé ---

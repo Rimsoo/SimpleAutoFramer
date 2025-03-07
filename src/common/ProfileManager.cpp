@@ -1,8 +1,34 @@
 #include "ProfileManager.h"
-#include "glibmm/ustring.h"
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 
-ProfileManager::ProfileManager(const std::string &profileFilePath)
-    : profileFilename(profileFilePath) {
+namespace fs = std::filesystem;
+
+ProfileManager::ProfileManager() {
+
+#ifdef INSTALL_DATA_DIR
+  // Récupérer le répertoire home de l'utilisateur
+  const char *home_dir = getenv("HOME");
+  if (!home_dir) {
+    std::cerr << "Error: Cannot find HOME directory." << std::endl;
+    return;
+  }
+
+  // Construire le chemin de configuration
+  fs::path config_dir = fs::path(home_dir) / ".config" / "simpleautoframer";
+  if (!fs::exists(config_dir)) {
+    fs::create_directories(config_dir);
+    std::cout << "Création du répertoire de configuration : " << config_dir
+              << std::endl;
+  }
+
+  profileFilename = (config_dir / "simpleautoframer.config.json").string();
+#else
+  profileFilename = fs::absolute("simpleautoframer.config.json").string();
+#endif
+
   loadProfilesFile();
 }
 
@@ -96,7 +122,7 @@ void ProfileManager::deleteProfile(const std::string &name) {
   }
 }
 
-void ProfileManager::switchProfile(const Glib::ustring &name) {
+void ProfileManager::switchProfile(const std::string &name) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = findProfile(name);
   if (it != savedProfiles.end()) {
