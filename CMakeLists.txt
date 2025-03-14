@@ -8,6 +8,12 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_PREFIX_PATH "/usr")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --- Collecte des sources depuis src/ ---
+file(GLOB PROJECT_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/common/*.cpp"
+)
+
 # Détection de l'OS
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(IS_LINUX TRUE)
@@ -28,24 +34,23 @@ if(IS_LINUX)
   pkg_check_modules(X11 REQUIRED x11)
   pkg_check_modules(XINPUT2 REQUIRED xi)
 
+  add_subdirectory(libv4l2cpp EXCLUDE_FROM_ALL)
+
   include_directories(
     ${X11_INCLUDE_DIRS}
     ${XINPUT2_INCLUDE_DIRS}
     ${GTKMM_INCLUDE_DIRS}
     ${APPINDICATOR_INCLUDE_DIRS}
-    libv4l2cpp EXCLUDE_FROM_ALL
   )
 
-  file(GLOB PROJECT_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gtk/*.cpp"
+  file(GLOB LINUX_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/gtk/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/camera/v4l2/*.cpp"
   )
+ 
+  list(APPEND PROJECT_SOURCES ${LINUX_SOURCES})
 endif()
 
-# --- Collecte des sources depuis src/ ---
-file(GLOB PROJECT_SOURCES
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/common/*.cpp"
-)
 
 add_executable(simpleautoframer ${PROJECT_SOURCES})
 
@@ -53,7 +58,8 @@ if(IS_LINUX)
   target_compile_definitions(simpleautoframer PUBLIC "IS_LINUX")
 
   target_include_directories(simpleautoframer PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gtk
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/gtk
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera/v4l2
     ${CMAKE_CURRENT_SOURCE_DIR}/libv4l2cpp/inc
   )
 
@@ -71,8 +77,9 @@ endif()
 # Inclusion des headers propres à l'application et de la lib
 target_include_directories(simpleautoframer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/camera
 )
 
 target_link_libraries(simpleautoframer PRIVATE

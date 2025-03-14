@@ -6,15 +6,11 @@
 #include <filesystem>
 #include <iostream>
 
-#ifdef IS_LINUX
-#include <sys/stat.h>
-#endif
-
 namespace fs = std::filesystem;
 
 Core::Core()
     : ui_(nullptr), profilesManager_(ProfileManager()),
-      capturingRunning_(false), videoOutput_(nullptr),
+      capturingRunning_(false), videoOutput_(CameraFactory::createCamera()),
       lastCenter_({0.5f, 0.5f}), lastZoom_(1.5) {}
 
 bool Core::init() {
@@ -85,37 +81,10 @@ void Core::openCaptureCamera() {
 
 // Ouvre (ou réouvre) la caméra virtuelle
 void Core::openVirtualCamera() {
-  std::string outputFile =
-      "/dev/video" +
-      std::to_string(profilesManager_.getVirtualCameraSelection());
-  if (!fs::exists(outputFile)) {
-    auto msg = "Attention : " + std::string(outputFile) +
-               " n'existe pas. Vérifiez v4l2loopback.";
-    if (ui_)
-      ui_->showMessage(IUi::WARNING, msg);
-
-    std::cerr << msg << std::endl;
-
-    return;
-  }
-
-  if (videoOutput_ != nullptr)
-    videoOutput_->stop();
-  delete videoOutput_;
-  videoOutput_ = nullptr;
-
-  V4L2DeviceParameters paramOut(
-      outputFile.c_str(), v4l2_fourcc('B', 'G', 'R', '4'),
-      profilesManager_.getTargetWidth(), profilesManager_.getTargetHeight(),
-      fps, IOTYPE_MMAP);
-  videoOutput_ = V4l2Output::create(paramOut);
-  if (!videoOutput_) {
-    auto msg = "Erreur : Impossible d'ouvrir la sortie " + outputFile;
-
-    if (ui_)
-      ui_->showMessage(IUi::ERROR, msg);
-
-    std::cerr << msg << std::endl;
+  if (!videoOutput_->open(profilesManager_.getVirtualCameraSelection(),
+                          profilesManager_.getTargetWidth(),
+                          profilesManager_.getTargetHeight(), fps)) {
+    // TODO MANAGE ERROR
     return;
   }
 
@@ -257,17 +226,10 @@ bool Core::processFrame(cv::Mat &frame) {
   cv::Mat processedOutput;
   cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
 
-  size_t bufferSize = processedOutput.total() * processedOutput.elemSize();
-  char *buffer = reinterpret_cast<char *>(processedOutput.data);
+  processedOutput.copyTo(frame);
 
-  // Si aucun consommateur n'est actif, on ne traite pas la frame
-  size_t nb = videoOutput_->write(buffer, bufferSize);
-  if (nb != bufferSize) {
-    std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize
-              << std::endl;
+  if (videoOutput_)
+    return videoOutput_->write(processedOutput);
 
-    return false;
-
-    processedOutput.copyTo(frame);
-    return true;
-  }
+  return false;
+}

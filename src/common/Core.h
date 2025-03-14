@@ -1,12 +1,9 @@
 // Core.h
 #pragma once
+#include "CameraFactory.h"
+#include "ICamera.h"
 #include "IUi.h"
 #include "ProfileManager.h"
-#include "VirtualCamera.h"
-
-#ifdef IS_LINUX
-#include "V4l2Output.h"
-#endif
 
 #include <atomic>
 #include <mutex>
@@ -50,7 +47,7 @@ private:
   std::mutex frameMutex_;
   cv::VideoCapture cap_;
 
-  VirtualCamera *videoOutput_;
+  ICamera *videoOutput_;
 
   // Modèles de détection et données de suivi
   cv::CascadeClassifier faceCascade_;
