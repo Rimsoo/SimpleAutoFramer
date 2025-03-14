@@ -5,7 +5,10 @@
 #include <cstddef>
 #include <filesystem>
 #include <iostream>
+
+#ifdef IS_LINUX
 #include <sys/stat.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -258,15 +261,13 @@ bool Core::processFrame(cv::Mat &frame) {
   char *buffer = reinterpret_cast<char *>(processedOutput.data);
 
   // Si aucun consommateur n'est actif, on ne traite pas la frame
-
   size_t nb = videoOutput_->write(buffer, bufferSize);
   if (nb != bufferSize) {
     std::cerr << "Erreur : " << nb << " octets écrits sur " << bufferSize
               << std::endl;
 
     return false;
-  }
 
-  processedOutput.copyTo(frame);
-  return true;
-}
+    processedOutput.copyTo(frame);
+    return true;
+  }

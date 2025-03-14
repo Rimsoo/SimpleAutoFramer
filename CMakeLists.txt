@@ -11,13 +11,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Détection de l'OS
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(IS_LINUX TRUE)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR MSYS)
   set(IS_WINDOWS TRUE)
+  set(OpenCV_DIR "/c/msys64/mingw64/lib/cmake/opencv4")
 endif()
 
 # --- Recherche des packages externes ---
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(nlohmann_json 3.11.3 REQUIRED)
 
 if(IS_LINUX)
   pkg_check_modules(GTKMM REQUIRED gtkmm-3.0)
@@ -31,14 +33,18 @@ if(IS_LINUX)
     ${XINPUT2_INCLUDE_DIRS}
     ${GTKMM_INCLUDE_DIRS}
     ${APPINDICATOR_INCLUDE_DIRS}
+    libv4l2cpp EXCLUDE_FROM_ALL
+  )
+
+  file(GLOB PROJECT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gtk/*.cpp"
   )
 endif()
-# --- Sous-répertoire de la bibliothèque interne ---
-add_subdirectory(libv4l2cpp EXCLUDE_FROM_ALL)
 
 # --- Collecte des sources depuis src/ ---
-file(GLOB_RECURSE PROJECT_SOURCES
+file(GLOB PROJECT_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/common/*.cpp"
 )
 
 add_executable(simpleautoframer ${PROJECT_SOURCES})
@@ -47,13 +53,16 @@ if(IS_LINUX)
   target_compile_definitions(simpleautoframer PUBLIC "IS_LINUX")
 
   target_include_directories(simpleautoframer PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gtk)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/gtk
+    ${CMAKE_CURRENT_SOURCE_DIR}/libv4l2cpp/inc
+  )
 
   target_link_libraries(simpleautoframer PRIVATE
     ${X11_LIBRARIES}
     ${XINPUT2_LIBRARIES}
     ${GTKMM_LIBRARIES}
     ${APPINDICATOR_LIBRARIES}
+    libv4l2cpp
   )
 elseif(IS_WINDOWS)
   target_compile_definitions(simpleautoframer PUBLIC "IS_WINDOWS")
@@ -64,12 +73,10 @@ target_include_directories(simpleautoframer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-    ${CMAKE_CURRENT_SOURCE_DIR}/libv4l2cpp/inc
 )
 
 target_link_libraries(simpleautoframer PRIVATE
     ${OpenCV_LIBS}
-    libv4l2cpp
 )
 
 # --- Copie des fichiers ressources dans le dossier de build ---

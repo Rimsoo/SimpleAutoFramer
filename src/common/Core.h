@@ -2,7 +2,12 @@
 #pragma once
 #include "IUi.h"
 #include "ProfileManager.h"
+#include "VirtualCamera.h"
+
+#ifdef IS_LINUX
 #include "V4l2Output.h"
+#endif
+
 #include <atomic>
 #include <mutex>
 #include <opencv2/core/mat.hpp>
@@ -44,7 +49,8 @@ private:
   std::thread captureThread_;
   std::mutex frameMutex_;
   cv::VideoCapture cap_;
-  V4l2Output *videoOutput_;
+
+  VirtualCamera *videoOutput_;
 
   // Modèles de détection et données de suivi
   cv::CascadeClassifier faceCascade_;
