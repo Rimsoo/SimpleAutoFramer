@@ -8,6 +8,9 @@
 #include <atomic>
 #include <mutex>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
 #include <opencv2/opencv.hpp>
 #include <thread>
 
@@ -52,6 +55,7 @@ private:
   // Modèles de détection et données de suivi
   cv::CascadeClassifier faceCascade_;
   cv::dnn::Net faceNet_;
+  cv::cuda::GpuMat gpu_frame_;
   std::atomic<cv::Point2f> lastCenter_;
   std::atomic<double> lastZoom_;
 

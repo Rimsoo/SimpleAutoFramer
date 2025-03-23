@@ -155,7 +155,12 @@ T smoothValue(const T &current, const T &last, double factor) {
 
 bool Core::processFrame(cv::Mat &frame) {
   std::vector<cv::Rect> faces;
+  cv::cuda::GpuMat gpu_frame, gpu_cropped, gpu_resized, gpu_processed;
+  cv::Mat processedOutput;
   int current_model = profilesManager_.getModelSelection();
+
+  gpu_frame.upload(frame);
+
   if (current_model == 0) {
     // Détection par Haar Cascade (CPU)
     cv::Mat processedBGRA;
@@ -217,17 +222,25 @@ bool Core::processFrame(cv::Mat &frame) {
   int x2 = std::min(center_x + crop_width / 2, frame.cols);
   int y2 = std::min(center_y + crop_height / 2, frame.rows);
   cv::Rect crop_region(x1, y1, x2 - x1, y2 - y1);
-  cv::Mat cropped_frame = frame(crop_region);
-  cv::Mat processed;
-  cv::resize(cropped_frame, processed,
-             cv::Size(profilesManager_.getTargetWidth(),
-                      profilesManager_.getTargetHeight()));
 
-  cv::Mat processedOutput;
-  cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
+  if (current_model == 0) {
+    cv::Mat cropped_frame = frame(crop_region);
+    cv::Mat processed;
+    cv::resize(cropped_frame, processed,
+               cv::Size(profilesManager_.getTargetWidth(),
+                        profilesManager_.getTargetHeight()));
+    cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
+  } else if (current_model == 1) {
+    gpu_cropped = gpu_frame(crop_region);
+    // Redimensionnement GPU
+    cv::cuda::resize(gpu_cropped, gpu_resized,
+                     cv::Size(profilesManager_.getTargetWidth(),
+                              profilesManager_.getTargetHeight()));
+    cv::cuda::cvtColor(gpu_resized, gpu_processed, cv::COLOR_BGR2BGRA);
+    gpu_processed.download(processedOutput);
+  }
 
   processedOutput.copyTo(frame);
-
   if (videoOutput_)
     return videoOutput_->write(processedOutput);
 

@@ -1,10 +1,15 @@
-cmake_minimum_required(VERSION 3.10)
-project(simpleautoframer)
+cmake_minimum_required(VERSION 3.25.2)
+project(simpleautoframer LANGUAGES CXX CUDA)
 
 option(INSTALL_MODE "Enable install mode" OFF)
+option(CMAKE_BUILD_TYPE Debug)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_BUILD_TYPE Debug)
+# Utilisation des standards C++20 et CUDA 20 (compatible avec CUDA 12.8)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 20)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
 set(CMAKE_PREFIX_PATH "/usr")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -47,10 +52,9 @@ if(IS_LINUX)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/gtk/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/camera/v4l2/*.cpp"
   )
- 
+
   list(APPEND PROJECT_SOURCES ${LINUX_SOURCES})
 endif()
-
 
 add_executable(simpleautoframer ${PROJECT_SOURCES})
 
@@ -82,6 +86,7 @@ target_include_directories(simpleautoframer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/camera
 )
 
+# Lier OpenCV avec les composants spécifiés (les variables OpenCV_LIBS sont définies par find_package)
 target_link_libraries(simpleautoframer PRIVATE
     ${OpenCV_LIBS}
 )
@@ -102,7 +107,6 @@ foreach(resource ${RESOURCE_FILES})
 endforeach()
 
 # --- Installation ---
-# Installer l'exécutable dans /usr/bin
 if(IS_LINUX)
   install(TARGETS simpleautoframer
         RUNTIME DESTINATION /usr/bin)
@@ -111,17 +115,14 @@ if(IS_LINUX)
         PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE
         GROUP_READ WORLD_EXECUTE WORLD_READ DESTINATION /usr/bin)
 
-  # Installer les fichiers ressources dans /usr/share/simpleautoframer
   install(FILES
     ${RESOURCE_FILES}
     DESTINATION /usr/share/simpleautoframer
   )
 
-  # Installer le fichier .desktop dans /usr/share/applications
   install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop
         DESTINATION /usr/share/applications)
 
-  # Installer l'icône dans /usr/share/icons/hicolor/64x64/apps et renommer
   install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
         DESTINATION /usr/share/icons/hicolor/64x64/apps)
 endif()

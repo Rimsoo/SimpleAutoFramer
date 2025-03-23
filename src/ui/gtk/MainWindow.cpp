@@ -556,7 +556,7 @@ void MainWindow::setupShortcuts() {
     }
 
     if (keysym != 0) {
-      hotkeys.RegisterHotkey(keysym, modifiers, [=]() {
+      hotkeys.RegisterHotkey(keysym, modifiers, [this, profile]() {
         profilesManager->switchProfile(profile.name);
         profilesSetup();
         signalProfileChanged.emit();
