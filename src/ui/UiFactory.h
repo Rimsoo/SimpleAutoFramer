@@ -5,6 +5,7 @@
 
 #ifdef IS_LINUX
 #include "GtkUi.h"
+#include "gdk/gdkx.h"
 #ifdef USE_X11
 #include "X11HotkeyListener.h"
 #endif
@@ -48,9 +49,9 @@ private:
 #endif
     } else {
 #ifdef USE_X11
-      hotkeyListener_ = std::make_unique<X11HotkeyListener>();
-      hotkeyListener_->Init(
-          gdk_x11_display_get_xdisplay(gdk_display_get_default()));
+      auto x11hkl = std::make_unique<X11HotkeyListener>();
+      x11hkl->Init(gdk_x11_display_get_xdisplay(gdk_display_get_default()));
+      hotkeyListener_ = std::move(x11hkl);
 #endif
     }
   }

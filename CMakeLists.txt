@@ -3,7 +3,18 @@ project(simpleautoframer LANGUAGES CXX CUDA)
 
 option(INSTALL_MODE "Enable install mode" OFF)
 option(CMAKE_BUILD_TYPE Debug)
+option(USE_X11 "Enable X11 support" ON)
+# option(USE_WAYLAND "Enable Wayland support" OFF)
 
+if(USE_X11)
+  find_package(X11 REQUIRED)
+  add_definitions(-DUSE_X11)
+endif()
+
+if(USE_WAYLAND)
+  # find_package(GTK3 REQUIRED)
+  add_definitions(-DUSE_WAYLAND)
+endif()
 # Utilisation des standards C++20 et CUDA 20 (compatible avec CUDA 12.8)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

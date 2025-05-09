@@ -31,6 +31,8 @@ struct Hotkey {
 
 class X11HotkeyListener : public IUiHotkeyListener {
 public:
+  X11HotkeyListener();
+  ~X11HotkeyListener();
   static X11HotkeyListener &GetInstance();
 
   void Init(Display *display);
@@ -40,9 +42,6 @@ public:
   std::map<Hotkey, std::vector<HotkeyCallback>> m_callbacks;
 
 private:
-  X11HotkeyListener();
-  ~X11HotkeyListener();
-
   void ProcessXIEvents(XIDeviceEvent *xievent);
   void GrabHotkey(const Hotkey &hotkey, bool grab);
   static gboolean OnXEvent(GIOChannel *source, GIOCondition condition,
