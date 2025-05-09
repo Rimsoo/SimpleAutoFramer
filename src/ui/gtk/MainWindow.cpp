@@ -32,8 +32,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("doc_menu_item", m_doc_menu_item);
   builder->get_widget("switch_view", m_switch_view);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
-  UiFactory::CreateHotkeyListener(this).Init(
-      gdk_x11_display_get_xdisplay(gdk_display_get_default()));
+
   // Vérifier que tous les widgets ont été correctement chargés
   if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
       !m_zoom_scale || !m_zoom_multiplier_scale || !m_confidence_scale ||
@@ -523,10 +522,10 @@ void MainWindow::setupAppIndicator() {
 }
 
 void MainWindow::setupShortcuts() {
-  auto &hotkeys = X11HotkeyListener::GetInstance();
+  auto hotkeys = UiFactory::getHotkeyListener();
 
   for (const auto &profile : profilesManager->getProfileList()) {
-    hotkeys.RegisterHotkey(profile.shortcut, [this, profile]() {
+    hotkeys->RegisterHotkey(profile.shortcut, [this, profile]() {
       profilesManager->switchProfile(profile.name);
       profilesSetup();
       signalProfileChanged.emit();

@@ -5,8 +5,10 @@
 
 namespace fs = std::filesystem;
 
-GtkUi::GtkUi(Core &core) : mainWindow_(nullptr) {
-  app_ = Gtk::Application::create("org.simple_auto_framer");
+GtkUi::GtkUi(Core &core)
+    : app_(Gtk::Application::create("org.simple_auto_framer")),
+      mainWindow_(nullptr) {
+
   // Chargement de l'interface via Glade
   auto refBuilder = Gtk::Builder::create();
   try {
@@ -38,10 +40,11 @@ GtkUi::GtkUi(Core &core) : mainWindow_(nullptr) {
   mainWindow_->signalVirtualCameraChanged.connect(
       [&core]() { core.openVirtualCamera(); });
 
-  gtk_init(nullptr, nullptr);
-
+  app_->register_application();
   core.setUi(this);
 }
+
+GtkApplication *GtkUi::GetGtkApp() const { return app_->gobj(); }
 
 void GtkUi::showMessage(MessageType type, const std::string &message) {
   if (mainWindow_) {

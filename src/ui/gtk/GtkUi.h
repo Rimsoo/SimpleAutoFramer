@@ -10,6 +10,7 @@ public:
   GtkUi(Core &core);
   virtual ~GtkUi() = default;
 
+  GtkApplication *GetGtkApp() const;
   void showMessage(MessageType type, const std::string &message) override;
   void updateFrame(const cv::Mat &frame) override;
   int run() override;
