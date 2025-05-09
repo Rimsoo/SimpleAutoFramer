@@ -11,7 +11,7 @@ cd build || exit 1
 
 # Configurer le projet avec CMake
 echo "Configuration du projet avec CMake..."
-cmake .. -DCMAKE_BUILD_TYPE=Release || {
+cmake .. -DCMAKE_BUILD_TYPE=Debug || {
   echo "Erreur lors de la configuration CMake"
   exit 1
 }

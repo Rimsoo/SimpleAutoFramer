@@ -1,9 +1,10 @@
 #include "MainWindow.h"
+#include "UiFactory.h"
 #include "gdk/gdkx.h"
 #include <filesystem>
 #include <iostream>
 
-#include "HotkeyListener.h"
+#include "X11HotkeyListener.h"
 
 namespace fs = std::filesystem;
 
@@ -31,7 +32,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("doc_menu_item", m_doc_menu_item);
   builder->get_widget("switch_view", m_switch_view);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
-  HotkeyListener::GetInstance().Init(
+  UiFactory::CreateHotkeyListener(this).Init(
       gdk_x11_display_get_xdisplay(gdk_display_get_default()));
   // Vérifier que tous les widgets ont été correctement chargés
   if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
@@ -521,49 +522,14 @@ void MainWindow::setupAppIndicator() {
   app_indicator_set_menu(indicator, GTK_MENU(menu));
 }
 
-std::vector<std::string> split(const std::string &s, char delimiter) {
-  std::vector<std::string> tokens;
-  std::string token;
-  std::istringstream tokenStream(s);
-  while (std::getline(tokenStream, token, delimiter)) {
-    tokens.push_back(token);
-  }
-  return tokens;
-}
-
 void MainWindow::setupShortcuts() {
-  auto &hotkeys = HotkeyListener::GetInstance();
+  auto &hotkeys = X11HotkeyListener::GetInstance();
 
   for (const auto &profile : profilesManager->getProfileList()) {
-    std::vector<std::string> parts = split(profile.shortcut, '+');
-    if (parts.empty())
-      continue;
-
-    unsigned int modifiers = 0;
-    KeySym keysym = 0;
-
-    for (const auto &part : parts) {
-      if (boost::algorithm::to_lower_copy(part).compare("ctrl") == 0)
-        modifiers |= ControlMask;
-      else if (boost::algorithm::to_lower_copy(part).compare("alt") == 0)
-        modifiers |= Mod1Mask;
-      else if (boost::algorithm::to_lower_copy(part).compare("shift") == 0)
-        modifiers |= ShiftMask;
-      else if (boost::algorithm::to_lower_copy(part).compare("super") == 0)
-        modifiers |= Mod4Mask;
-      else
-        keysym = XStringToKeysym(part.c_str());
-    }
-
-    if (keysym != 0) {
-      hotkeys.RegisterHotkey(keysym, modifiers, [this, profile]() {
-        profilesManager->switchProfile(profile.name);
-        profilesSetup();
-        signalProfileChanged.emit();
-      });
-    } else {
-      showMessage(Gtk::MESSAGE_WARNING,
-                  "Cannot parse the shortcut : " + profile.shortcut);
-    }
+    hotkeys.RegisterHotkey(profile.shortcut, [this, profile]() {
+      profilesManager->switchProfile(profile.name);
+      profilesSetup();
+      signalProfileChanged.emit();
+    });
   }
 }

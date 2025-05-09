@@ -1,15 +1,21 @@
 // HotkeyListener.h
 // Inspired by :
 // https://github.com/MaartenBaert/ssr/blob/master/src/GUI/HotkeyListener.h
+// X11HotkeyListener.h
+#ifdef USE_X11
 #ifndef HOTKEYLISTENER_H
 #define HOTKEYLISTENER_H
 
+#include "IUiHotkeyListener.h"
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
+#include <boost/algorithm/string.hpp>
 #include <functional>
 #include <glib.h>
 #include <map>
 #include <set>
+#include <sstream>
+#include <string>
 
 typedef std::function<void()> HotkeyCallback;
 
@@ -23,19 +29,19 @@ struct Hotkey {
   }
 };
 
-class HotkeyListener {
+class X11HotkeyListener : public IUiHotkeyListener {
 public:
-  static HotkeyListener &GetInstance();
+  static X11HotkeyListener &GetInstance();
 
   void Init(Display *display);
-  void RegisterHotkey(unsigned int keysym, unsigned int modifiers,
-                      const HotkeyCallback &callback);
-  void UnregisterAll();
+  void RegisterHotkey(const std::string &accelerator,
+                      const HotkeyCallback &callback) override;
+  void UnregisterAll() override;
   std::map<Hotkey, std::vector<HotkeyCallback>> m_callbacks;
 
 private:
-  HotkeyListener();
-  ~HotkeyListener();
+  X11HotkeyListener();
+  ~X11HotkeyListener();
 
   void ProcessXIEvents(XIDeviceEvent *xievent);
   void GrabHotkey(const Hotkey &hotkey, bool grab);
@@ -50,3 +56,4 @@ private:
 };
 
 #endif // HOTKEYLISTENER_H
+#endif

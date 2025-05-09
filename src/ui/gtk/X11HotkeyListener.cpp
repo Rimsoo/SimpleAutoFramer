@@ -1,20 +1,21 @@
 // HotkeyListener.cpp
 // Inspired by :
 // https://github.com/MaartenBaert/ssr/blob/master/src/GUI/HotkeyListener.cpp
-#include "HotkeyListener.h"
+#ifdef USE_X11
+#include "X11HotkeyListener.h"
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
 
 #include "gdk/gdkx.h"
-HotkeyListener &HotkeyListener::GetInstance() {
-  static HotkeyListener instance;
+X11HotkeyListener &X11HotkeyListener::GetInstance() {
+  static X11HotkeyListener instance;
   return instance;
 }
 
-HotkeyListener::HotkeyListener()
+X11HotkeyListener::X11HotkeyListener()
     : m_display(nullptr), m_xinput_opcode(-1), m_raw_modifiers(0) {}
 
-HotkeyListener::~HotkeyListener() {
+X11HotkeyListener::~X11HotkeyListener() {
   UnregisterAll();
   if (m_display)
     XCloseDisplay(m_display);
@@ -23,7 +24,7 @@ HotkeyListener::~HotkeyListener() {
 static GdkFilterReturn xevent_filter(GdkXEvent *gdk_xevent, GdkEvent *event,
                                      gpointer data) {
   XEvent *xevent = (XEvent *)gdk_xevent;
-  HotkeyListener *listener = static_cast<HotkeyListener *>(data);
+  X11HotkeyListener *listener = static_cast<X11HotkeyListener *>(data);
 
   if (xevent->type == KeyPress || xevent->type == KeyRelease) {
     // Traitez les événements de touche ici
@@ -43,7 +44,7 @@ static GdkFilterReturn xevent_filter(GdkXEvent *gdk_xevent, GdkEvent *event,
   return GDK_FILTER_CONTINUE;
 }
 
-void HotkeyListener::Init(Display *display) {
+void X11HotkeyListener::Init(Display *display) {
   m_display = display;
 
   // Ajoutez un filtre pour intercepter les événements X11
@@ -51,8 +52,37 @@ void HotkeyListener::Init(Display *display) {
   gdk_window_add_filter(root_window, xevent_filter, this);
 }
 
-void HotkeyListener::RegisterHotkey(unsigned int keysym, unsigned int modifiers,
-                                    const HotkeyCallback &callback) {
+std::vector<std::string> split(const std::string &s, char delimiter) {
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream tokenStream(s);
+  while (std::getline(tokenStream, token, delimiter)) {
+    tokens.push_back(token);
+  }
+  return tokens;
+}
+
+void X11HotkeyListener::RegisterHotkey(const std::string &shortcut,
+                                       const HotkeyCallback &callback) {
+  std::vector<std::string> parts = split(shortcut, '+');
+  if (parts.empty())
+    return;
+
+  unsigned int modifiers = 0;
+  KeySym keysym = 0;
+
+  for (const auto &part : parts) {
+    if (boost::algorithm::to_lower_copy(part).compare("ctrl") == 0)
+      modifiers |= ControlMask;
+    else if (boost::algorithm::to_lower_copy(part).compare("alt") == 0)
+      modifiers |= Mod1Mask;
+    else if (boost::algorithm::to_lower_copy(part).compare("shift") == 0)
+      modifiers |= ShiftMask;
+    else if (boost::algorithm::to_lower_copy(part).compare("super") == 0)
+      modifiers |= Mod4Mask;
+    else
+      keysym = XStringToKeysym(part.c_str());
+  }
   KeyCode keycode = XKeysymToKeycode(m_display, keysym);
   if (keycode == 0)
     return;
@@ -62,16 +92,16 @@ void HotkeyListener::RegisterHotkey(unsigned int keysym, unsigned int modifiers,
   GrabHotkey(hotkey, true);
 }
 
-void HotkeyListener::UnregisterAll() {
+void X11HotkeyListener::UnregisterAll() {
   for (auto &pair : m_callbacks) {
     GrabHotkey(pair.first, false);
   }
   m_callbacks.clear();
 }
 
-gboolean HotkeyListener::OnXEvent(GIOChannel *source, GIOCondition condition,
-                                  gpointer data) {
-  HotkeyListener *listener = static_cast<HotkeyListener *>(data);
+gboolean X11HotkeyListener::OnXEvent(GIOChannel *source, GIOCondition condition,
+                                     gpointer data) {
+  X11HotkeyListener *listener = static_cast<X11HotkeyListener *>(data);
   XEvent event;
 
   while (XPending(listener->m_display)) {
@@ -88,7 +118,7 @@ gboolean HotkeyListener::OnXEvent(GIOChannel *source, GIOCondition condition,
   return TRUE;
 }
 
-void HotkeyListener::ProcessXIEvents(XIDeviceEvent *xievent) {
+void X11HotkeyListener::ProcessXIEvents(XIDeviceEvent *xievent) {
   switch (xievent->evtype) {
   case XI_RawKeyPress: {
     KeySym sym = XkbKeycodeToKeysym(m_display, xievent->detail, 0, 0);
@@ -145,7 +175,7 @@ void HotkeyListener::ProcessXIEvents(XIDeviceEvent *xievent) {
   }
 }
 
-void HotkeyListener::GrabHotkey(const Hotkey &hotkey, bool grab) {
+void X11HotkeyListener::GrabHotkey(const Hotkey &hotkey, bool grab) {
   unsigned int masks[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};
 
   for (unsigned int mask : masks) {
@@ -160,3 +190,4 @@ void HotkeyListener::GrabHotkey(const Hotkey &hotkey, bool grab) {
   }
   XFlush(m_display);
 }
+#endif
