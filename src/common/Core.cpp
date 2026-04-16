@@ -8,6 +8,26 @@
 
 namespace fs = std::filesystem;
 
+namespace {
+
+std::string resourceDir() {
+#ifdef INSTALL_DATA_DIR
+  return std::string{INSTALL_DATA_DIR};
+#else
+  return fs::absolute(".").string();
+#endif
+}
+
+std::string resourcePath(const std::string &name) {
+#ifdef INSTALL_DATA_DIR
+  return resourceDir() + "/" + name;
+#else
+  return fs::absolute(name).string();
+#endif
+}
+
+} // namespace
+
 Core::Core()
     : ui_(nullptr), profilesManager_(ProfileManager()),
       capturingRunning_(false), videoOutput_(CameraFactory::createCamera()),
@@ -17,44 +37,51 @@ bool Core::init() {
   static bool initialized = false;
   if (initialized)
     return true;
-#ifdef INSTALL_DATA_DIR
-  std::string cascade_path =
-      std::string(INSTALL_DATA_DIR) + "/haarcascade_frontalface_default.xml";
-#else
-  std::string cascade_path =
-      fs::absolute("haarcascade_frontalface_default.xml").string();
-#endif
-  if (!faceCascade_.load(cascade_path)) {
-    auto msg = "Erreur : Impossible de charger le modèle Haar Cascade.";
+
+  const std::string cascade_path =
+      resourcePath("haarcascade_frontalface_default.xml");
+
+  try {
+    if (!faceCascade_.load(cascade_path)) {
+      const std::string msg =
+          "Erreur : impossible de charger le modèle Haar Cascade (" +
+          cascade_path + ").";
+      if (ui_)
+        ui_->showMessage(IUi::ERROR, msg);
+      std::cerr << msg << std::endl;
+      return false;
+    }
+  } catch (const cv::Exception &ex) {
+    const std::string msg =
+        std::string("Exception OpenCV lors du chargement du Haar Cascade : ") +
+        ex.what();
     if (ui_)
       ui_->showMessage(IUi::ERROR, msg);
-
     std::cerr << msg << std::endl;
     return false;
   }
 
-// Chargement du modèle DNN res10_300x300_ssd_iter_140000
-#ifdef INSTALL_DATA_DIR
-  std::string dnn_proto_path =
-      std::string(INSTALL_DATA_DIR) + "/deploy.prototxt";
-  std::string dnn_model_path = std::string(INSTALL_DATA_DIR) +
-                               "/res10_300x300_ssd_iter_140000.caffemodel";
-#else
-  std::string dnn_proto_path = fs::absolute("deploy.prototxt").string();
-  std::string dnn_model_path =
-      fs::absolute("res10_300x300_ssd_iter_140000.caffemodel").string();
-#endif
+  // Chargement du modèle DNN res10_300x300_ssd_iter_140000
+  const std::string dnn_proto_path = resourcePath("deploy.prototxt");
+  const std::string dnn_model_path =
+      resourcePath("res10_300x300_ssd_iter_140000.caffemodel");
+
   try {
     faceNet_ = cv::dnn::readNetFromCaffe(dnn_proto_path, dnn_model_path);
+#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
     faceNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
     faceNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+#else
+    faceNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+    faceNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+#endif
   } catch (const cv::Exception &ex) {
-    auto msg = ex.what();
+    const std::string msg =
+        std::string("Erreur lors du chargement du modèle DNN : ") + ex.what();
     if (ui_)
       ui_->showMessage(IUi::WARNING, msg);
-
     std::cerr << msg << std::endl;
-    return false;
+    // Not a fatal error: Haar Cascade is still available.
   }
 
   initialized = true;
@@ -66,7 +93,17 @@ void Core::openCaptureCamera() {
   if (cap_.isOpened())
     cap_.release();
 
-  cap_.open(profilesManager_.getCameraSelection());
+  try {
+    cap_.open(profilesManager_.getCameraSelection());
+  } catch (const cv::Exception &ex) {
+    const std::string msg = std::string("Erreur OpenCV à l'ouverture de la "
+                                        "caméra : ") +
+                            ex.what();
+    if (ui_)
+      ui_->showMessage(IUi::ERROR, msg);
+    std::cerr << msg << std::endl;
+    return;
+  }
 
   if (!cap_.isOpened()) {
     auto msg = "Erreur : Impossible d'ouvrir la caméra de "
@@ -84,14 +121,19 @@ void Core::openVirtualCamera() {
   if (!videoOutput_->open(profilesManager_.getVirtualCameraSelection(),
                           profilesManager_.getTargetWidth(),
                           profilesManager_.getTargetHeight(), fps)) {
-    // TODO MANAGE ERROR
+    const std::string msg =
+        "Erreur : impossible d'ouvrir la caméra virtuelle "
+        "(/dev/video" +
+        std::to_string(profilesManager_.getVirtualCameraSelection()) +
+        "). Chargez le module avec : sudo modprobe v4l2loopback";
+    if (ui_)
+      ui_->showMessage(IUi::WARNING, msg);
+    std::cerr << msg << std::endl;
     return;
   }
 
   if (profilesManager_.getTargetWidth() != videoOutput_->getWidth() ||
       profilesManager_.getTargetHeight() != videoOutput_->getHeight()) {
-    // main_ui->show_message("warning", "La résolution demandée n'a pas été
-    // appliquée.");
     profilesManager_.setTargetWidth(videoOutput_->getWidth());
     profilesManager_.setTargetHeight(videoOutput_->getHeight());
   }
@@ -155,11 +197,13 @@ T smoothValue(const T &current, const T &last, double factor) {
 
 bool Core::processFrame(cv::Mat &frame) {
   std::vector<cv::Rect> faces;
-  cv::cuda::GpuMat gpu_frame, gpu_cropped, gpu_resized, gpu_processed;
   cv::Mat processedOutput;
   int current_model = profilesManager_.getModelSelection();
 
+#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
+  cv::cuda::GpuMat gpu_frame, gpu_cropped, gpu_resized, gpu_processed;
   gpu_frame.upload(frame);
+#endif
 
   if (current_model == 0) {
     // Détection par Haar Cascade (CPU)
@@ -168,25 +212,43 @@ bool Core::processFrame(cv::Mat &frame) {
     faceCascade_.detectMultiScale(processedBGRA, faces, 1.1, 3, 0,
                                   cv::Size(100, 100));
   } else if (current_model == 1 && !faceNet_.empty()) {
-    // Détection par DNN (CPU) avec res10_300x300_ssd_iter_140000
-    cv::Mat blob =
-        cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300),
-                               cv::Scalar(104.0, 177.0, 123.0), false, false);
-    faceNet_.setInput(blob);
-    cv::Mat detections = faceNet_.forward();
-    float conf_threshold = profilesManager_.getDetectionConfidence();
+    // Détection par DNN (CPU ou CUDA selon SAF_HAS_OPENCV_CUDA).
+    // Wrap in try/catch: on a broken CUDA setup (version mismatch, OOM,
+    // cuDNN assert) we don't want to take the whole app down.
+    try {
+      cv::Mat blob =
+          cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300),
+                                 cv::Scalar(104.0, 177.0, 123.0), false, false);
+      faceNet_.setInput(blob);
+      cv::Mat detections = faceNet_.forward();
+      float conf_threshold = profilesManager_.getDetectionConfidence();
 
-    // Remodélisation de la matrice de détections en 2D (N x 7)
-    cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F,
-                         detections.ptr<float>());
-    for (int i = 0; i < detectionMat.rows; i++) {
-      float confidence = detectionMat.at<float>(i, 2);
-      if (confidence > conf_threshold) {
-        int x1 = static_cast<int>(detectionMat.at<float>(i, 3) * frame.cols);
-        int y1 = static_cast<int>(detectionMat.at<float>(i, 4) * frame.rows);
-        int x2 = static_cast<int>(detectionMat.at<float>(i, 5) * frame.cols);
-        int y2 = static_cast<int>(detectionMat.at<float>(i, 6) * frame.rows);
-        faces.push_back(cv::Rect(x1, y1, x2 - x1, y2 - y1));
+      cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F,
+                           detections.ptr<float>());
+      for (int i = 0; i < detectionMat.rows; i++) {
+        float confidence = detectionMat.at<float>(i, 2);
+        if (confidence > conf_threshold) {
+          int x1 = static_cast<int>(detectionMat.at<float>(i, 3) * frame.cols);
+          int y1 = static_cast<int>(detectionMat.at<float>(i, 4) * frame.rows);
+          int x2 = static_cast<int>(detectionMat.at<float>(i, 5) * frame.cols);
+          int y2 = static_cast<int>(detectionMat.at<float>(i, 6) * frame.rows);
+          faces.push_back(cv::Rect(x1, y1, x2 - x1, y2 - y1));
+        }
+      }
+    } catch (const cv::Exception &e) {
+      static bool warned = false;
+      if (!warned) {
+        warned = true;
+        std::cerr << "[core] DNN inference failed: " << e.what() << std::endl;
+        std::cerr << "[core] Falling back to Haar Cascade for this run."
+                  << std::endl;
+      }
+      // Silently degrade to no-detection for this frame; retry next frame.
+    } catch (const std::exception &e) {
+      static bool warned = false;
+      if (!warned) {
+        warned = true;
+        std::cerr << "[core] DNN inference threw: " << e.what() << std::endl;
       }
     }
   }
@@ -223,22 +285,31 @@ bool Core::processFrame(cv::Mat &frame) {
   int y2 = std::min(center_y + crop_height / 2, frame.rows);
   cv::Rect crop_region(x1, y1, x2 - x1, y2 - y1);
 
-  if (current_model == 0) {
-    cv::Mat cropped_frame = frame(crop_region);
-    cv::Mat processed;
-    cv::resize(cropped_frame, processed,
-               cv::Size(profilesManager_.getTargetWidth(),
-                        profilesManager_.getTargetHeight()));
-    cv::cvtColor(processed, processedOutput, cv::COLOR_BGR2BGRA);
-  } else if (current_model == 1) {
+  // Guard against degenerate crop regions (avoids OpenCV assertion crashes).
+  if (crop_region.width <= 0 || crop_region.height <= 0)
+    return false;
+
+  const cv::Size target{profilesManager_.getTargetWidth(),
+                        profilesManager_.getTargetHeight()};
+
+#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
+  if (current_model == 1) {
     gpu_cropped = gpu_frame(crop_region);
-    // Redimensionnement GPU
-    cv::cuda::resize(gpu_cropped, gpu_resized,
-                     cv::Size(profilesManager_.getTargetWidth(),
-                              profilesManager_.getTargetHeight()));
+    cv::cuda::resize(gpu_cropped, gpu_resized, target);
     cv::cuda::cvtColor(gpu_resized, gpu_processed, cv::COLOR_BGR2BGRA);
     gpu_processed.download(processedOutput);
+  } else
+#endif
+  {
+    // CPU path (used for Haar and for DNN when CUDA is not available).
+    cv::Mat cropped_frame = frame(crop_region);
+    cv::Mat resized;
+    cv::resize(cropped_frame, resized, target);
+    cv::cvtColor(resized, processedOutput, cv::COLOR_BGR2BGRA);
   }
+
+  if (processedOutput.empty())
+    return false;
 
   processedOutput.copyTo(frame);
   if (videoOutput_)

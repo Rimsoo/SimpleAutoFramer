@@ -33,14 +33,26 @@ GtkUi::GtkUi(Core &core)
     return;
   }
   mainWindow_->setProfileManager(&core.getProfileManager());
-  mainWindow_->setProfileManager(&core.getProfileManager());
-  // Connectez ici d'autres signaux si nécessaire
   mainWindow_->signalCameraChanged.connect(
       [&core]() { core.openCaptureCamera(); });
   mainWindow_->signalVirtualCameraChanged.connect(
       [&core]() { core.openVirtualCamera(); });
 
-  app_->register_application();
+  // register_application throws Gio::DBus::Error if the well-known name is
+  // already taken (quick restarts, stuck previous process, …). Treat it as
+  // non-fatal — the app can still function, it just won't receive remote
+  // GApplication signals.
+  try {
+    app_->register_application();
+  } catch (const Glib::Error &e) {
+    std::cerr << "Avertissement : impossible d'enregistrer l'application "
+                 "(peut-être une autre instance ?) : "
+              << e.what() << std::endl;
+  } catch (const std::exception &e) {
+    std::cerr << "Avertissement : register_application : " << e.what()
+              << std::endl;
+  }
+
   core.setUi(this);
 }
 

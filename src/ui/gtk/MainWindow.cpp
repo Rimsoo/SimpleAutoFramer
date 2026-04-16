@@ -1,10 +1,9 @@
 #include "MainWindow.h"
 #include "UiFactory.h"
-#include "gdk/gdkx.h"
 #include <filesystem>
+#include <gdk/gdkkeysyms.h>
+#include <glibmm/markup.h>
 #include <iostream>
-
-#include "X11HotkeyListener.h"
 
 namespace fs = std::filesystem;
 
@@ -52,6 +51,29 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   m_profile_box->pack_start(m_columns.name);
   m_camera_selection_combo->pack_start(m_columns.name);
   m_virtual_camera_selection_combo->pack_start(m_columns.name);
+
+  // Faire de l'entrée raccourci un widget cliquable pour capturer les touches.
+  m_shortcut_entry->set_editable(false);
+  m_shortcut_entry->set_placeholder_text("Cliquez puis appuyez sur la combinaison…");
+  m_shortcut_entry->set_icon_from_icon_name("input-keyboard-symbolic",
+                                            Gtk::ENTRY_ICON_SECONDARY);
+  m_shortcut_entry->set_icon_tooltip_text(
+      "Cliquez pour capturer un raccourci", Gtk::ENTRY_ICON_SECONDARY);
+  m_shortcut_entry->set_icon_activatable(true, Gtk::ENTRY_ICON_SECONDARY);
+  m_shortcut_entry->signal_icon_press().connect(
+      [this](Gtk::EntryIconPosition pos, const GdkEventButton *) {
+        if (pos == Gtk::ENTRY_ICON_SECONDARY)
+          captureShortcut();
+      });
+  // Un double-clic dans la zone texte déclenche aussi la capture, pratique.
+  m_shortcut_entry->signal_button_press_event().connect(
+      [this](GdkEventButton *ev) -> bool {
+        if (ev->type == GDK_2BUTTON_PRESS) {
+          captureShortcut();
+          return true;
+        }
+        return false;
+      });
 
   // Connecter les signaux
   m_new_profile->signal_activate().connect(
@@ -339,45 +361,97 @@ bool MainWindow::on_delete_event(GdkEventAny *anyEvent) {
   return true; // Empêche la fermeture de l'application
 }
 
+// Called from the capture thread. Must NOT touch GTK. We just copy the
+// frame into a mutex-protected buffer and schedule a single idle redraw
+// that will run on the GTK thread. If a redraw is already scheduled we
+// skip — the next idle handler will pick up the freshest frame, so we
+// can never saturate the UI even at 60 fps.
 void MainWindow::updateFrame(const cv::Mat &frame) {
-  if (!is_visible())
+  if (frame.empty())
     return;
-  cv::Mat rgb_frame;
-  cv::cvtColor(frame, rgb_frame, cv::COLOR_BGR2RGB);
-  if (rgb_frame.empty()) {
-    std::cerr << "Erreur : rgb_frame est vide !" << std::endl;
+
+  cv::Mat rgb;
+  cv::cvtColor(frame, rgb, cv::COLOR_BGR2RGB);
+  if (rgb.empty())
     return;
+
+  {
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    // Ensure the stored Mat owns its data so it outlives the caller.
+    m_pendingFrame = rgb.clone();
   }
 
-  auto pb_original = Gdk::Pixbuf::create_from_data(
-      rgb_frame.data, Gdk::COLORSPACE_RGB, false, 8, rgb_frame.cols,
-      rgb_frame.rows, rgb_frame.step);
+  bool expected = false;
+  if (m_redrawScheduled.compare_exchange_strong(expected, true)) {
+    g_idle_add(&MainWindow::onRedrawIdle, this);
+  }
+}
 
-  int container_width = m_main_panned->get_position();
-  int container_height = m_main_panned->get_height();
+gboolean MainWindow::onRedrawIdle(gpointer user_data) {
+  auto *self = static_cast<MainWindow *>(user_data);
+  self->m_redrawScheduled.store(false);
+  self->redrawVideo();
+  return G_SOURCE_REMOVE;
+}
 
-  float ratio =
-      static_cast<float>(pb_original->get_width()) / pb_original->get_height();
-  int new_width = pb_original->get_width();
-  int new_height = pb_original->get_height();
+void MainWindow::redrawVideo() {
+  if (!m_video_image || !is_visible())
+    return;
 
-  if (pb_original->get_width() > container_width ||
-      pb_original->get_height() > container_height) {
-    if (pb_original->get_width() > container_width) {
-      new_width = container_width;
-      new_height = static_cast<int>(container_width / ratio);
+  // Take a local copy under lock; outside the lock we can do the potentially
+  // slow scale operation without blocking the capture thread.
+  cv::Mat rgb;
+  {
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    if (m_pendingFrame.empty())
+      return;
+    rgb = m_pendingFrame; // cheap: refcounted header only
+  }
+
+  // Build a pixbuf that OWNS its pixel buffer. Gdk::Pixbuf::create
+  // allocates a new buffer; we then memcpy the rows in. This way the
+  // pixbuf is valid for the full lifetime GTK needs it, which fixes the
+  // cairo_surface_reference assertion that happened on resize when the
+  // original cv::Mat had already been destroyed.
+  auto pb = Gdk::Pixbuf::create(Gdk::COLORSPACE_RGB, /*has_alpha=*/false,
+                                /*bits_per_sample=*/8, rgb.cols, rgb.rows);
+  if (!pb)
+    return;
+
+  const int dst_stride = pb->get_rowstride();
+  guint8 *dst = pb->get_pixels();
+  const size_t row_bytes = static_cast<size_t>(rgb.cols) * 3;
+  for (int y = 0; y < rgb.rows; ++y) {
+    std::memcpy(dst + static_cast<size_t>(y) * dst_stride,
+                rgb.ptr<uchar>(y), row_bytes);
+  }
+
+  // Compute the display size so the image fits the current paned slot.
+  int container_width = 0, container_height = 0;
+  if (m_main_panned) {
+    container_width = m_main_panned->get_position();
+    container_height = m_main_panned->get_height();
+  }
+  int new_w = pb->get_width();
+  int new_h = pb->get_height();
+  if (container_width > 0 && container_height > 0 &&
+      (new_w > container_width || new_h > container_height)) {
+    const float ratio = static_cast<float>(new_w) / new_h;
+    if (new_w > container_width) {
+      new_w = container_width;
+      new_h = static_cast<int>(container_width / ratio);
     } else {
-      new_height = container_height;
-      new_width = static_cast<int>(container_height * ratio);
+      new_h = container_height;
+      new_w = static_cast<int>(container_height * ratio);
     }
   }
+  if (new_w < 2 || new_h < 2)
+    return;
 
-  auto pb_scaled =
-      pb_original->scale_simple(new_width, new_height, Gdk::INTERP_BILINEAR);
-  if (m_video_image)
-    m_video_image->set(pb_scaled);
-  else
-    std::cerr << "Erreur : m_video_image n'est pas initialisé." << std::endl;
+  // scale_simple returns a new owning pixbuf — safe to hand to GtkImage.
+  auto scaled = pb->scale_simple(new_w, new_h, Gdk::INTERP_BILINEAR);
+  if (scaled)
+    m_video_image->set(scaled);
 }
 
 void MainWindow::onApplyClicked() {
@@ -521,14 +595,160 @@ void MainWindow::setupAppIndicator() {
   app_indicator_set_menu(indicator, GTK_MENU(menu));
 }
 
+namespace {
+
+// Convert a GDK key event into the SimpleAutoFramer accelerator string
+// ("Ctrl+Alt+K", "KP_Add", "F5", …). Returns an empty string for modifier-
+// only presses (Ctrl alone, etc.) so the capture dialog can keep listening.
+std::string gdkEventToAccel(const GdkEventKey &ev) {
+  const guint kv = ev.keyval;
+
+  // Ignore pure-modifier presses.
+  switch (kv) {
+  case GDK_KEY_Control_L:
+  case GDK_KEY_Control_R:
+  case GDK_KEY_Shift_L:
+  case GDK_KEY_Shift_R:
+  case GDK_KEY_Alt_L:
+  case GDK_KEY_Alt_R:
+  case GDK_KEY_Super_L:
+  case GDK_KEY_Super_R:
+  case GDK_KEY_Meta_L:
+  case GDK_KEY_Meta_R:
+  case GDK_KEY_Hyper_L:
+  case GDK_KEY_Hyper_R:
+  case GDK_KEY_ISO_Level3_Shift: // AltGr
+    return "";
+  default:
+    break;
+  }
+
+  std::string out;
+  auto append = [&](const char *s) {
+    if (!out.empty())
+      out += '+';
+    out += s;
+  };
+
+  const auto mods = ev.state;
+  if (mods & GDK_CONTROL_MASK)
+    append("Ctrl");
+  if (mods & GDK_MOD1_MASK)
+    append("Alt");
+  if (mods & GDK_SHIFT_MASK)
+    append("Shift");
+  if (mods & GDK_SUPER_MASK)
+    append("Super");
+
+  // Find a readable name for the key. gdk_keyval_name() returns strings like
+  // "a", "1", "F5", "KP_Add", "Return", … which matches what X11/Portal
+  // accelerator parsers expect.
+  const char *keyName = gdk_keyval_name(gdk_keyval_to_upper(kv));
+  if (!keyName || *keyName == '\0')
+    return "";
+
+  append(keyName);
+  return out;
+}
+
+} // namespace
+
+void MainWindow::captureShortcut() {
+  Gtk::Dialog dialog("Capturer un raccourci", *this, /*modal=*/true);
+  dialog.set_transient_for(*this);
+  dialog.set_default_size(360, 140);
+  dialog.set_resizable(false);
+
+  auto *box = dialog.get_content_area();
+  box->set_margin_top(12);
+  box->set_margin_bottom(12);
+  box->set_margin_start(18);
+  box->set_margin_end(18);
+  box->set_spacing(8);
+
+  Gtk::Label prompt(
+      "Appuyez sur la combinaison de touches désirée.\n"
+      "Échap pour annuler, Retour arrière pour effacer.");
+  prompt.set_justify(Gtk::JUSTIFY_CENTER);
+  prompt.set_line_wrap(true);
+  box->pack_start(prompt, true, true);
+
+  Gtk::Label preview;
+  preview.set_markup("<b><span size=\"x-large\"> </span></b>");
+  preview.set_halign(Gtk::ALIGN_CENTER);
+  box->pack_start(preview, true, true);
+
+  dialog.add_button("Annuler", Gtk::RESPONSE_CANCEL);
+  auto *okBtn = dialog.add_button("Valider", Gtk::RESPONSE_OK);
+  okBtn->set_sensitive(false);
+
+  std::string captured;
+
+  dialog.signal_key_press_event().connect(
+      [&](GdkEventKey *ev) -> bool {
+        if (ev->keyval == GDK_KEY_Escape) {
+          dialog.response(Gtk::RESPONSE_CANCEL);
+          return true;
+        }
+        if (ev->keyval == GDK_KEY_BackSpace &&
+            (ev->state & (GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_SHIFT_MASK |
+                          GDK_SUPER_MASK)) == 0) {
+          captured.clear();
+          preview.set_markup("<b><span size=\"x-large\"> </span></b>");
+          okBtn->set_sensitive(false);
+          return true;
+        }
+        std::string accel = gdkEventToAccel(*ev);
+        if (accel.empty())
+          return true; // modifier-only; keep listening
+        captured = accel;
+        preview.set_markup("<b><span size=\"x-large\">" +
+                           Glib::Markup::escape_text(accel) +
+                           "</span></b>");
+        okBtn->set_sensitive(true);
+        return true;
+      },
+      /*after=*/false);
+
+  dialog.show_all_children();
+  int result = dialog.run();
+  dialog.close();
+
+  if (result == Gtk::RESPONSE_OK && !captured.empty()) {
+    m_shortcut_entry->set_text(captured);
+  }
+}
+
 void MainWindow::setupShortcuts() {
-  auto hotkeys = UiFactory::getHotkeyListener();
+  auto *hotkeys = UiFactory::getHotkeyListener();
+  if (!hotkeys) {
+    std::cerr << "Avertissement : aucun gestionnaire de raccourcis disponible."
+              << std::endl;
+    return;
+  }
+
+  // Drop any previous bindings (the portal backend requires a fresh session).
+  hotkeys->UnregisterAll();
 
   for (const auto &profile : profilesManager->getProfileList()) {
+    if (profile.shortcut.empty())
+      continue;
     hotkeys->RegisterHotkey(profile.shortcut, [this, profile]() {
+      std::cerr << "[saf] shortcut '" << profile.shortcut
+                << "' → switching to profile '" << profile.name << "'"
+                << std::endl;
       profilesManager->switchProfile(profile.name);
       profilesSetup();
       signalProfileChanged.emit();
     });
+  }
+
+  // Activate the batch. On Wayland/portal this triggers the user-visible
+  // consent prompt; on X11 it calls XGrabKey.
+  const auto backend = hotkeys->Commit();
+  if (backend.empty()) {
+    std::cerr << "Avertissement : impossible d'activer les raccourcis "
+                 "globaux."
+              << std::endl;
   }
 }

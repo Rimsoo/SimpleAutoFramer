@@ -1,5 +1,8 @@
 #include "ProfileManager.h"
 #include <algorithm>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -141,18 +144,37 @@ void ProfileManager::loadProfilesFile() {
     return;
   }
 
-  std::ifstream inFile(profileFilename);
   nlohmann::json j;
-  inFile >> j;
+  try {
+    std::ifstream inFile(profileFilename);
+    if (!inFile) {
+      std::cerr << "Avertissement : impossible d'ouvrir " << profileFilename
+                << " ; utilisation des valeurs par défaut." << std::endl;
+      create();
+      return;
+    }
+    inFile >> j;
+  } catch (const nlohmann::json::exception &ex) {
+    std::cerr << "Avertissement : configuration JSON corrompue ("
+              << profileFilename << ") : " << ex.what()
+              << ". Un profil par défaut est créé." << std::endl;
+    create();
+    return;
+  }
 
-  // Charger toutes les profiles
-  for (const auto &[key, value] : j["profiles"].items()) {
-    savedProfiles.push_back(Profile::fromJson(key, value));
+  try {
+    if (j.contains("profiles") && j["profiles"].is_object()) {
+      for (const auto &[key, value] : j["profiles"].items()) {
+        savedProfiles.push_back(Profile::fromJson(key, value));
+      }
+    }
+  } catch (const nlohmann::json::exception &ex) {
+    std::cerr << "Avertissement : certains profils n'ont pu être chargés : "
+              << ex.what() << std::endl;
   }
 
   showQuitMessage = j.value("show_quit_message", true);
 
-  // Appliquer la dernière profile utilisée
   std::string lastUsed = j.value("last_used", "default");
   auto it = findProfile(lastUsed);
   if (it != savedProfiles.end()) {
@@ -169,6 +191,9 @@ void ProfileManager::saveProfileFiles() {
 
 // Helpers privés
 void ProfileManager::internalSave() {
+  if (!currentProfile)
+    return;
+
   nlohmann::json j;
   j["show_quit_message"] = showQuitMessage;
   j["last_used"] = currentProfile->name;
@@ -177,8 +202,38 @@ void ProfileManager::internalSave() {
     j["profiles"][profile->name] = profile->toJson();
   }
 
-  std::ofstream outFile(profileFilename);
-  outFile << j.dump(4);
+  // Atomic write: dump to a sibling .tmp file, fsync, then rename().
+  // Protects the config from partial writes on crash / power loss.
+  const std::string tmp = profileFilename + ".tmp";
+  try {
+    {
+      std::ofstream outFile(tmp, std::ios::binary | std::ios::trunc);
+      if (!outFile) {
+        std::cerr << "Avertissement : impossible de créer " << tmp << " ("
+                  << std::strerror(errno) << ")" << std::endl;
+        return;
+      }
+      outFile << j.dump(4);
+      outFile.flush();
+      if (!outFile) {
+        std::cerr << "Avertissement : écriture partielle dans " << tmp
+                  << std::endl;
+        std::remove(tmp.c_str());
+        return;
+      }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, profileFilename, ec);
+    if (ec) {
+      std::cerr << "Avertissement : échec du renommage de " << tmp << " vers "
+                << profileFilename << " : " << ec.message() << std::endl;
+      std::remove(tmp.c_str());
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "Avertissement : exception lors de l'écriture du config : "
+              << e.what() << std::endl;
+    std::remove(tmp.c_str());
+  }
 }
 
 std::vector<ProfileManager::Profile *>::iterator

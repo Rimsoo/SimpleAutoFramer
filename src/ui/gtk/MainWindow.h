@@ -8,7 +8,7 @@
 #include "gtkmm/enums.h"
 #include "gtkmm/menuitem.h"
 #include "gtkmm/paned.h"
-#include <boost/algorithm/string.hpp>
+#include <atomic>
 #include <config.h>
 #include <cstdlib>
 #include <cstring>
@@ -17,15 +17,12 @@
 #include <gtkmm.h>
 #include <gtkmm/application.h>
 #include <libayatana-appindicator/app-indicator.h>
+#include <mutex>
 #include <opencv2/dnn.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
-
-#include <X11/XKBlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 
 class MainWindow : public Gtk::Window {
 
@@ -58,9 +55,19 @@ protected:
     Gtk::TreeModelColumn<Glib::ustring> name;
   };
 
-  Display *display = nullptr;
-  std::map<std::pair<KeyCode, unsigned int>, std::string> shortcutMap;
   ProfileManager *profilesManager;
+
+  // Video frame handoff from the capture thread to the GTK thread.
+  // The capture thread copies frames into m_pendingFrame (under mutex).
+  // A single idle source (tracked via m_redrawScheduled) reads it from
+  // the GTK main thread and updates the GtkImage. This is thread-safe and
+  // avoids the pixbuf-points-to-freed-Mat class of cairo assertions.
+  std::mutex m_frameMutex;
+  cv::Mat m_pendingFrame;                // RGB, owned by this class
+  std::atomic<bool> m_redrawScheduled{false};
+  static gboolean onRedrawIdle(gpointer user_data);
+  void redrawVideo();
+
   // Widgets
   Gtk::Image *m_video_image;
   Gtk::Paned *m_main_panned;
@@ -99,6 +106,11 @@ protected:
 
   void setupShortcuts();
   void setupAppIndicator();
+
+  /// Pop a small modal dialog that listens for a key combination and writes
+  /// the result into m_shortcut_entry in SimpleAutoFramer format
+  /// (e.g. "Ctrl+Alt+K").
+  void captureShortcut();
   // Gestionnaires de signaux
   bool on_delete_event(GdkEventAny *anyEvent) override;
   void onApplyClicked();

@@ -6,13 +6,17 @@
 #include "ProfileManager.h"
 
 #include <atomic>
+#include <config.h>
 #include <mutex>
 #include <opencv2/core/mat.hpp>
+#include <opencv2/opencv.hpp>
+#include <thread>
+
+#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
-#include <opencv2/opencv.hpp>
-#include <thread>
+#endif
 
 class Core {
 public:
@@ -55,7 +59,9 @@ private:
   // Modèles de détection et données de suivi
   cv::CascadeClassifier faceCascade_;
   cv::dnn::Net faceNet_;
+#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
   cv::cuda::GpuMat gpu_frame_;
+#endif
   std::atomic<cv::Point2f> lastCenter_;
   std::atomic<double> lastZoom_;
 
