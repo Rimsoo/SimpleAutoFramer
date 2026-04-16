@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  linux-ubuntu:
+    name: Ubuntu 24.04 (GTK + Wayland portal)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config ninja-build \
+            libopencv-dev nlohmann-json3-dev \
+            libgtkmm-3.0-dev libayatana-appindicator3-dev \
+            libx11-dev libxi-dev libglib2.0-dev
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_CUDA=OFF \
+            -DUSE_X11_SHORTCUTS=ON \
+            -DUSE_PORTAL_SHORTCUTS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+  linux-arch:
+    name: Arch Linux (PKGBUILD lint)
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install base dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            base-devel cmake git pkgconf \
+            opencv gtkmm3 libayatana-appindicator \
+            nlohmann-json libx11 libxi glib2 \
+            namcap
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure + build
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_CUDA=OFF \
+            -DUSE_X11_SHORTCUTS=ON \
+            -DUSE_PORTAL_SHORTCUTS=ON
+          cmake --build build --parallel
+
+      - name: Lint PKGBUILD
+        run: |
+          if [ -f packaging/arch/PKGBUILD ]; then
+            namcap packaging/arch/PKGBUILD || true
+          fi

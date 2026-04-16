@@ -1,0 +1,107 @@
+// src/main_shortcut_integration_example.cpp
+//
+// EXAMPLE — NOT meant to replace your main.cpp, just to show the pattern.
+// Copy the relevant bits into your real main / Framer bootstrap.
+//
+// Key points:
+//  * Use createShortcutManager() — it picks the right backend automatically.
+//  * REGISTER ALL SHORTCUTS BEFORE calling start() (important for the portal
+//    backend, which is single-shot on BindShortcuts).
+//  * Heavy work in callbacks MUST be dispatched to another thread (or to the
+//    UI thread via Glib::signal_idle) because callbacks fire on the backend
+//    event thread.
+//  * On shutdown (signal handler), call manager->stop() before exiting so
+//    grabs are released / the portal session is closed cleanly.
+
+#include "ui/shortcuts/IShortcutManager.h"
+
+#include <atomic>
+#include <chrono>
+#include <csignal>
+#include <iostream>
+#include <memory>
+#include <thread>
+
+// Forward references to your actual app objects
+namespace saf {
+    class Framer;   // your existing framing engine
+    class ConfigManager;
+}
+
+namespace {
+    std::atomic<bool> g_shouldQuit{false};
+    std::unique_ptr<saf::IShortcutManager> g_shortcuts;
+}
+
+extern "C" void handleSignal(int) {
+    g_shouldQuit = true;
+    // Note: async-signal-safe operations only here.
+    // Real cleanup happens in main() below after the loop exits.
+}
+
+int main(int /*argc*/, char** /*argv*/) {
+    std::signal(SIGINT,  handleSignal);
+    std::signal(SIGTERM, handleSignal);
+
+    // --- 1. Your existing bootstrap: config, camera, framer, UI...
+
+    // saf::ConfigManager config;
+    // config.loadOrDefault("~/.config/simpleautoframer/config.json");
+    // saf::Framer framer(config);
+
+    // --- 2. Shortcut wiring: pick best backend, register, start.
+    g_shortcuts = saf::createShortcutManager();
+    if (!g_shortcuts) {
+        std::cerr << "Warning: no shortcut backend available. "
+                     "The app will work without global hotkeys." << std::endl;
+    } else {
+        using saf::ShortcutDescriptor;
+
+        g_shortcuts->registerShortcut({
+            "toggle_framing",
+            "Toggle auto-framing on/off",
+            "CTRL+ALT+SHIFT+SUPER+K",
+            []{ /* framer.toggleEnabled(); */ std::cout << "[hotkey] toggle\n"; }
+        });
+        g_shortcuts->registerShortcut({
+            "zoom_in",
+            "Zoom in",
+            "KP_Add",
+            []{ /* framer.adjustZoom(+0.1f); */ std::cout << "[hotkey] +\n"; }
+        });
+        g_shortcuts->registerShortcut({
+            "zoom_out",
+            "Zoom out",
+            "KP_Subtract",
+            []{ /* framer.adjustZoom(-0.1f); */ std::cout << "[hotkey] -\n"; }
+        });
+        g_shortcuts->registerShortcut({
+            "reset_zoom",
+            "Reset zoom to default",
+            "KP_Multiply",
+            []{ /* framer.resetZoom(); */ std::cout << "[hotkey] reset\n"; }
+        });
+
+        if (!g_shortcuts->start()) {
+            std::cerr << "Warning: shortcut backend '"
+                      << g_shortcuts->backendName()
+                      << "' failed to start." << std::endl;
+        } else {
+            std::cout << "Shortcuts ready via " << g_shortcuts->backendName()
+                      << "\n";
+        }
+    }
+
+    // --- 3. Your main loop (GTK app run, or framer processing).
+    // while (!g_shouldQuit.load()) framer.processFrame();
+    while (!g_shouldQuit.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    // --- 4. Graceful shutdown
+    if (g_shortcuts) g_shortcuts->stop();
+    g_shortcuts.reset();
+    // framer.shutdown(); camera.release(); etc.
+
+    return 0;
+}

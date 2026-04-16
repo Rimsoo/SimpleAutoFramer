@@ -1,34 +1,38 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Quick build + run for development (no system install).
 
-# Créer le dossier build s'il n'existe pas
-if [ ! -d "build" ]; then
-  echo "Création du dossier build..."
-  mkdir build
+set -Eeuo pipefail
+
+BUILD_TYPE="${1:-Debug}"
+BUILD_DIR="build"
+
+echo "==> Syncing submodules"
+git submodule update --init --recursive
+
+# Prefer the distro OpenCV over any custom /usr/local build. A frequent
+# pitfall on Arch: /usr/local/lib/cmake/opencv4/ pins an exact CUDA version
+# ("Found unsuitable version 13.2, required exactly 12.8") which breaks the
+# configure. /usr/lib/cmake/opencv4/ (opencv / opencv-cuda package) works.
+OPENCV_DIR_ARG=()
+if [ -z "${OpenCV_DIR:-}" ] && [ -f /usr/lib/cmake/opencv4/OpenCVConfig.cmake ]; then
+    OPENCV_DIR_ARG=(-DOpenCV_DIR=/usr/lib/cmake/opencv4)
 fi
 
-# Se déplacer dans le dossier build
-cd build || exit 1
+mkdir -p "$BUILD_DIR"
+pushd "$BUILD_DIR" >/dev/null
 
-# Configurer le projet avec CMake
-echo "Configuration du projet avec CMake..."
-cmake .. -DCMAKE_BUILD_TYPE=Debug || {
-  echo "Erreur lors de la configuration CMake"
-  exit 1
-}
+echo "==> Configuring ($BUILD_TYPE)"
+cmake .. \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DINSTALL_MODE=OFF \
+    -DUSE_CUDA=OFF \
+    "${OPENCV_DIR_ARG[@]}"
 
-# Compiler le projet
-echo "Compilation du projet..."
-make || {
-  echo "Erreur lors de la compilation"
-  exit 1
-}
+echo "==> Building"
+cmake --build . --parallel "$(nproc)"
 
-# Exécuter le programme
-echo "Lancement du programme..."
-./simpleautoframer || {
-  echo "Erreur lors de l'exécution du programme"
-  exit 1
-}
+echo "==> Running"
+./simpleautoframer "${@:2}"
 
-# Revenir à la racine du projet
-cd ..
+popd >/dev/null

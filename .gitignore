@@ -1,11 +1,54 @@
-src/*.o
-*.a
-*.cmake
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+
+# CMake
 CMakeCache.txt
 CMakeFiles/
-libv4l2cpptest
+CMakeScripts/
+cmake_install.cmake
 Makefile
-build/
-.cache/
+compile_commands.json
+*.cmake
+!packaging/**/*.cmake
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Editors / IDE
 .vscode/
-__cmake_systeminformation/
+.idea/
+.cache/
+*.swp
+*.swo
+*~
+
+# Logs / runtime artifacts
+nohup.out
+*.log
+core
+core.*
+
+# Python (if helper scripts are added)
+__pycache__/
+*.pyc
+
+# AUR build artifacts
+packaging/arch/pkg/
+packaging/arch/src/
+packaging/arch/*.pkg.tar.*
+packaging/arch/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+simpleautoframer.config.json
