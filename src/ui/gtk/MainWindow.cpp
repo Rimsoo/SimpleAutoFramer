@@ -31,6 +31,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("doc_menu_item", m_doc_menu_item);
   builder->get_widget("switch_view", m_switch_view);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
+  builder->get_widget("status_label", m_status_label);
 
   // Vérifier que tous les widgets ont été correctement chargés
   if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
@@ -750,5 +751,14 @@ void MainWindow::setupShortcuts() {
     std::cerr << "Avertissement : impossible d'activer les raccourcis "
                  "globaux."
               << std::endl;
+  }
+
+  // Update status strip with the backend info so the user can see which
+  // flavour of shortcut routing is active.
+  if (m_status_label) {
+    std::string line = "● READY";
+    if (!backend.empty())
+      line += " · SHORTCUTS " + std::string(backend);
+    m_status_label->set_text(line);
   }
 }

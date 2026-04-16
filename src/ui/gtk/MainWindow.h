@@ -83,6 +83,7 @@ protected:
   Gtk::Entry *m_shortcut_entry;
   Gtk::ComboBoxText *m_profile_box;
   Gtk::Button *m_apply_button;
+  Gtk::Label *m_status_label{nullptr};
 
   Gtk::MenuItem *m_new_profile;
   Gtk::MenuItem *m_delete_profile;

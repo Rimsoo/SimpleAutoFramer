@@ -127,23 +127,39 @@
           <class name="saf-header"/>
         </style>
 
-        <!-- Left: hamburger popover -->
+        <!-- Left: hamburger popover + live dot -->
         <child>
-          <object class="GtkMenuButton" id="menu_button">
+          <object class="GtkBox">
             <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="focus-on-click">False</property>
-            <property name="popup">app_menu</property>
-            <property name="tooltip-text" translatable="yes">Menu</property>
+            <property name="spacing">8</property>
             <child>
-              <object class="GtkImage">
+              <object class="GtkMenuButton" id="menu_button">
                 <property name="visible">True</property>
-                <property name="icon-name">open-menu-symbolic</property>
+                <property name="can-focus">True</property>
+                <property name="focus-on-click">False</property>
+                <property name="popup">app_menu</property>
+                <property name="tooltip-text" translatable="yes">Menu</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">True</property>
+                    <property name="icon-name">open-menu-symbolic</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="image-button"/>
+                </style>
               </object>
             </child>
-            <style>
-              <class name="image-button"/>
-            </style>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="label">●</property>
+                <property name="tooltip-text" translatable="yes">Virtual camera status</property>
+                <style>
+                  <class name="saf-live-dot"/>
+                </style>
+              </object>
+            </child>
           </object>
         </child>
 
@@ -600,11 +616,25 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
-                    <property name="label" translatable="yes">Apply changes</property>
+                    <property name="label" translatable="yes">APPLY CHANGES</property>
                     <property name="margin-top">4</property>
                     <style>
-                      <class name="suggested-action"/>
                       <class name="saf-apply"/>
+                    </style>
+                  </object>
+                </child>
+
+                <!-- ===== Status strip ===== -->
+                <child>
+                  <object class="GtkLabel" id="status_label">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="xalign">0</property>
+                    <property name="label" translatable="yes">● READY · SimpleAutoFramer v0.2</property>
+                    <property name="margin-top">10</property>
+                    <style>
+                      <class name="saf-status"/>
                     </style>
                   </object>
                 </child>
