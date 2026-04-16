@@ -272,6 +272,7 @@ if(IS_LINUX)
         ${CMAKE_CURRENT_SOURCE_DIR}/data/haarcascade_frontalface_default.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
         ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.glade
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.css
         ${CMAKE_CURRENT_SOURCE_DIR}/data/res10_300x300_ssd_iter_140000.caffemodel
         ${CMAKE_CURRENT_SOURCE_DIR}/data/deploy.prototxt
         DESTINATION ${CMAKE_INSTALL_DATADIR}/simpleautoframer)
