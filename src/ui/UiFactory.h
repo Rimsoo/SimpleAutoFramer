@@ -5,13 +5,7 @@
 
 #ifdef IS_LINUX
 #include "GtkUi.h"
-#include "gdk/gdkx.h"
-#ifdef USE_X11
-#include "X11HotkeyListener.h"
-#endif
-#ifdef USE_WAYLAND
-#include "WaylandHotkeyListener.h"
-#endif
+#include "SafShortcutAdapter.h"
 #elif IS_WINDOWS
 #include "WindowsUi.h"
 #endif
@@ -22,9 +16,11 @@ class UiFactory {
 public:
   static IUi *createUi(Core &core) {
 #ifdef IS_LINUX
+    // The hotkey listener must exist BEFORE GtkUi is constructed, because
+    // GtkUi::GtkUi triggers MainWindow::setProfileManager → setupShortcuts,
+    // which asks for getHotkeyListener() during that call stack.
+    CreateHotkeyListener();
     auto *ui = new GtkUi(core);
-    // Initialiser le listener avec l'application GTK
-    CreateHotkeyListener(ui->GetGtkApp());
     return ui;
 #elif IS_WINDOWS
     return new WindowsUi(core);
@@ -38,22 +34,16 @@ public:
 private:
   static std::unique_ptr<IUiHotkeyListener> hotkeyListener_;
 
-  static void CreateHotkeyListener(GtkApplication *app) {
+  static void CreateHotkeyListener() {
     if (hotkeyListener_)
       return;
-
-    const char *session_type = getenv("XDG_SESSION_TYPE");
-    if (session_type && strcmp(session_type, "wayland") == 0) {
-#ifdef USE_WAYLAND
-      hotkeyListener_ = std::make_unique<WaylandHotkeyListener>(app);
+#ifdef IS_LINUX
+    // The SAF adapter internally picks the best backend at runtime:
+    //   X11 session     -> X11ShortcutManager (XGrabKey)
+    //   Wayland session -> PortalShortcutManager (xdg-desktop-portal)
+    //   unknown         -> tries portal first (works under XWayland too)
+    hotkeyListener_ = std::make_unique<SafShortcutAdapter>();
 #endif
-    } else {
-#ifdef USE_X11
-      auto x11hkl = std::make_unique<X11HotkeyListener>();
-      x11hkl->Init(gdk_x11_display_get_xdisplay(gdk_display_get_default()));
-      hotkeyListener_ = std::move(x11hkl);
-#endif
-    }
   }
 };
 
