@@ -1,6 +1,7 @@
 // src/ui/shortcuts/SafShortcutAdapter.cpp
 
 #include "SafShortcutAdapter.h"
+#include "HyprlandBindsSync.h"
 
 #include <glib.h>
 
@@ -132,6 +133,16 @@ std::string_view SafShortcutAdapter::Commit() {
             << (pending_.size() > 1 ? "s" : "")
             << " submitted to backend " << mgr_->backendName() << "."
             << std::endl;
+
+  // Convenience for Hyprland users: rewrite the managed block in
+  // hyprland.conf so the `bind = ..., global, :<id>` lines match the
+  // current shortcut set, then reload. Without this, Hyprland wouldn't
+  // route physical keys to the portal until the user edits the config by
+  // hand. No-op on other compositors (KDE / GNOME wire bindings themselves).
+  if (mgr_->backendName() == "xdg-desktop-portal") {
+    syncHyprlandBinds(pending_);
+  }
+
   return mgr_->backendName();
 }
 

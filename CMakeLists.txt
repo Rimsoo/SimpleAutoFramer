@@ -131,7 +131,8 @@ if(IS_LINUX)
 
     # SAF shortcut adapter — always compiled on Linux.
     list(APPEND PROJECT_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/shortcuts/SafShortcutAdapter.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/shortcuts/SafShortcutAdapter.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/shortcuts/HyprlandBindsSync.cpp")
 
     # --- New shortcut backends (Linux) ---
     if(USE_X11_SHORTCUTS)

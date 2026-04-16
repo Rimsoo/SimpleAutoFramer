@@ -12,6 +12,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
     : Gtk::Window(cobject) {
   // Récupérer les widgets depuis Glade
   builder->get_widget("video_image", m_video_image);
+  builder->get_widget("video_container", m_video_container);
   builder->get_widget("apply_button", m_apply_button);
   builder->get_widget("smoothing_factor", m_smoothing_scale);
   builder->get_widget("zoom_base", m_zoom_scale);
@@ -20,7 +21,6 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("target_width", m_width_spin);
   builder->get_widget("target_height", m_height_spin);
   builder->get_widget("model_selection", m_model_selection_combo);
-  builder->get_widget("main_panned", m_main_panned);
   builder->get_widget("camera_selection", m_camera_selection_combo);
   builder->get_widget("virtual_camera_selection",
                       m_virtual_camera_selection_combo);
@@ -29,18 +29,16 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("delete_profile", m_delete_profile);
   builder->get_widget("about_menu_item", m_about_menu_item);
   builder->get_widget("doc_menu_item", m_doc_menu_item);
-  builder->get_widget("switch_view", m_switch_view);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
   builder->get_widget("status_label", m_status_label);
 
   // Vérifier que tous les widgets ont été correctement chargés
-  if (!m_video_image || !m_apply_button || !m_smoothing_scale ||
-      !m_zoom_scale || !m_zoom_multiplier_scale || !m_confidence_scale ||
-      !m_width_spin || !m_height_spin || !m_model_selection_combo ||
-      !m_main_panned || !m_camera_selection_combo ||
+  if (!m_video_image || !m_video_container || !m_apply_button ||
+      !m_smoothing_scale || !m_zoom_scale || !m_zoom_multiplier_scale ||
+      !m_confidence_scale || !m_width_spin || !m_height_spin ||
+      !m_model_selection_combo || !m_camera_selection_combo ||
       !m_virtual_camera_selection_combo || !m_profile_box || !m_new_profile ||
-      !m_delete_profile || !m_about_menu_item || !m_doc_menu_item ||
-      !m_switch_view) {
+      !m_delete_profile || !m_about_menu_item || !m_doc_menu_item) {
     std::cerr << "Erreur : certains widgets n'ont pas été trouvés dans le "
                  "fichier Glade."
               << std::endl;
@@ -91,11 +89,32 @@ MainWindow::MainWindow(BaseObjectType *cobject,
         "xdg-open "
         "https://github.com/Rimsoo/SimpleAutoFramer/blob/main/README.md");
   });
-  m_switch_view->signal_activate().connect([this]() {
-    m_main_panned->get_orientation() == Gtk::ORIENTATION_HORIZONTAL
-        ? m_main_panned->set_orientation(Gtk::ORIENTATION_VERTICAL)
-        : m_main_panned->set_orientation(Gtk::ORIENTATION_HORIZONTAL);
+  // Live slider preview: updating the in-memory profile is enough, Core
+  // reads these values on every frame. We keep the save-on-Apply behaviour.
+  auto liveSliderHandler = [this](Gtk::Scale *scale,
+                                  void (ProfileManager::*setter)(double)) {
+    if (m_suppress_live_updates || !profilesManager)
+      return;
+    (profilesManager->*setter)(scale->get_value());
+  };
+  m_zoom_scale->signal_value_changed().connect([this, liveSliderHandler]() {
+    liveSliderHandler(m_zoom_scale, &ProfileManager::setZoomBase);
   });
+  m_zoom_multiplier_scale->signal_value_changed().connect(
+      [this, liveSliderHandler]() {
+        liveSliderHandler(m_zoom_multiplier_scale,
+                          &ProfileManager::setZoomMultiplier);
+      });
+  m_smoothing_scale->signal_value_changed().connect(
+      [this, liveSliderHandler]() {
+        liveSliderHandler(m_smoothing_scale,
+                          &ProfileManager::setSmoothingFactor);
+      });
+  m_confidence_scale->signal_value_changed().connect(
+      [this, liveSliderHandler]() {
+        liveSliderHandler(m_confidence_scale,
+                          &ProfileManager::setDetectionConfidence);
+      });
 
   show_all_children();
 }
@@ -182,6 +201,16 @@ void MainWindow::setProfileManager(ProfileManager *profileManager) {
 }
 
 void MainWindow::profilesSetup() {
+  // While we push profile values into the scales/spins, the live slider
+  // handlers must NOT re-assign them back onto the profile (which would be
+  // a no-op but confusing in traces).
+  struct Guard {
+    bool &flag;
+    bool prev;
+    Guard(bool &f) : flag(f), prev(f) { flag = true; }
+    ~Guard() { flag = prev; }
+  } guard(m_suppress_live_updates);
+
   setupProfileMenuItems();
   setupProfileBox();
   setupAdjustments();
@@ -427,11 +456,13 @@ void MainWindow::redrawVideo() {
                 rgb.ptr<uchar>(y), row_bytes);
   }
 
-  // Compute the display size so the image fits the current paned slot.
+  // Compute the display size so the image fits the current video area.
+  // We look at the box that wraps the image (m_video_container) and give
+  // ourselves a small inner margin so the dark card's border is visible.
   int container_width = 0, container_height = 0;
-  if (m_main_panned) {
-    container_width = m_main_panned->get_position();
-    container_height = m_main_panned->get_height();
+  if (m_video_container) {
+    container_width = m_video_container->get_allocated_width() - 24;
+    container_height = m_video_container->get_allocated_height() - 24;
   }
   int new_w = pb->get_width();
   int new_h = pb->get_height();

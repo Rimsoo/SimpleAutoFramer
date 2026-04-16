@@ -69,27 +69,34 @@ protected:
   void redrawVideo();
 
   // Widgets
-  Gtk::Image *m_video_image;
-  Gtk::Paned *m_main_panned;
-  Gtk::Scale *m_smoothing_scale;
-  Gtk::Scale *m_zoom_scale;
-  Gtk::Scale *m_zoom_multiplier_scale;
-  Gtk::Scale *m_confidence_scale;
-  Gtk::SpinButton *m_width_spin;
-  Gtk::SpinButton *m_height_spin;
-  Gtk::ComboBoxText *m_model_selection_combo;
-  Gtk::ComboBoxText *m_camera_selection_combo;
-  Gtk::ComboBoxText *m_virtual_camera_selection_combo;
-  Gtk::Entry *m_shortcut_entry;
-  Gtk::ComboBoxText *m_profile_box;
-  Gtk::Button *m_apply_button;
+  Gtk::Image *m_video_image{nullptr};
+  Gtk::Widget *m_video_container{nullptr};  // the box whose allocation
+                                            // drives the pixbuf scale.
+  Gtk::Scale *m_smoothing_scale{nullptr};
+  Gtk::Scale *m_zoom_scale{nullptr};
+  Gtk::Scale *m_zoom_multiplier_scale{nullptr};
+  Gtk::Scale *m_confidence_scale{nullptr};
+  Gtk::SpinButton *m_width_spin{nullptr};
+  Gtk::SpinButton *m_height_spin{nullptr};
+  Gtk::ComboBoxText *m_model_selection_combo{nullptr};
+  Gtk::ComboBoxText *m_camera_selection_combo{nullptr};
+  Gtk::ComboBoxText *m_virtual_camera_selection_combo{nullptr};
+  Gtk::Entry *m_shortcut_entry{nullptr};
+  Gtk::ComboBoxText *m_profile_box{nullptr};
+  Gtk::Button *m_apply_button{nullptr};
   Gtk::Label *m_status_label{nullptr};
 
-  Gtk::MenuItem *m_new_profile;
-  Gtk::MenuItem *m_delete_profile;
-  Gtk::MenuItem *m_about_menu_item;
-  Gtk::MenuItem *m_doc_menu_item;
-  Gtk::MenuItem *m_switch_view;
+  Gtk::MenuItem *m_new_profile{nullptr};
+  Gtk::MenuItem *m_delete_profile{nullptr};
+  Gtk::MenuItem *m_about_menu_item{nullptr};
+  Gtk::MenuItem *m_doc_menu_item{nullptr};
+
+  // Live-preview plumbing for the 4 slider controls: the handlers write
+  // directly into the ProfileManager (so Core picks up the change on the
+  // next frame), but do NOT save to disk — that still happens on Apply.
+  // We raise m_suppress_live_updates during programmatic set_value calls
+  // (profile switch etc.) to avoid reacting to ourselves.
+  bool m_suppress_live_updates{false};
 
   // Modèle pour la ComboBox
   ModelColumns m_columns;
