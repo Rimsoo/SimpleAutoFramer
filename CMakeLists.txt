@@ -236,15 +236,23 @@ set(RESOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/data/haarcascade_frontalface_default.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
     ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.glade
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.css
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop
     ${CMAKE_CURRENT_SOURCE_DIR}/data/res10_300x300_ssd_iter_140000.caffemodel
     ${CMAKE_CURRENT_SOURCE_DIR}/data/deploy.prototxt
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall
 )
 
+# Copy resources at BUILD time (not configure time) so edits to data/*
+# propagate without requiring a CMake re-run.
 foreach(resource ${RESOURCE_FILES})
     if(EXISTS ${resource})
-        file(COPY ${resource} DESTINATION ${CMAKE_BINARY_DIR})
+        get_filename_component(_resource_name ${resource} NAME)
+        add_custom_command(
+            TARGET simpleautoframer POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${resource} ${CMAKE_BINARY_DIR}/${_resource_name}
+            VERBATIM)
     else()
         message(WARNING "Missing resource: ${resource}")
     endif()

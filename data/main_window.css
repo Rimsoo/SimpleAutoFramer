@@ -1,0 +1,179 @@
+/* SimpleAutoFramer — GTK3 theme overrides.
+ * Loaded at app startup via Gtk::CssProvider. Keeps visual polish out
+ * of the .glade file so hot-reloading the style doesn't require
+ * regenerating the widget tree.
+ *
+ * Everything here is scoped through .saf-* style classes so it does
+ * not interfere with the rest of the user's GTK theme.
+ */
+
+/* ---------- HeaderBar ---------- */
+
+.saf-header {
+  padding: 4px 6px;
+  border-bottom: 1px solid alpha(@theme_fg_color, 0.08);
+}
+
+.saf-header .title {
+  font-weight: 700;
+  letter-spacing: 0.1px;
+}
+
+.saf-header .subtitle {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.saf-header-profile label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+  letter-spacing: 0.5px;
+}
+
+.saf-header-profile combobox {
+  min-height: 28px;
+}
+
+/* ---------- Paned handle ---------- */
+
+.saf-paned > separator {
+  min-width: 1px;
+  min-height: 1px;
+  background-image: none;
+  background-color: alpha(@theme_fg_color, 0.1);
+}
+
+.saf-paned > separator:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.4);
+}
+
+/* ---------- Cards (grouped sections) ---------- */
+
+.saf-card {
+  background-color: alpha(@theme_fg_color, 0.04);
+  border: 1px solid alpha(@theme_fg_color, 0.09);
+  border-radius: 12px;
+  padding: 2px;
+}
+
+.saf-card > border {
+  border: none;
+}
+
+/* Place the section title INSIDE the card, at the top, with spacing. */
+.saf-card > label {
+  margin: 12px 16px 4px 16px;
+}
+
+.saf-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: alpha(@theme_fg_color, 0.55);
+}
+
+/* ---------- Video card (the one wrapping the webcam preview) ---------- */
+
+.saf-video-card {
+  background-color: #0d0e11;
+  border: 1px solid alpha(@theme_fg_color, 0.08);
+  padding: 0;
+}
+
+.saf-video-card image {
+  color: alpha(white, 0.22);
+  background-color: transparent;
+}
+
+.saf-video-wrap {
+  padding: 0;
+}
+
+/* ---------- Sliders ---------- */
+
+scale {
+  margin-right: 4px;
+  padding: 6px 0;
+}
+
+scale trough {
+  min-height: 5px;
+  border-radius: 6px;
+  background-color: alpha(@theme_fg_color, 0.14);
+}
+
+scale highlight {
+  border-radius: 6px;
+  background-color: @theme_selected_bg_color;
+}
+
+scale slider {
+  min-width: 16px;
+  min-height: 16px;
+  margin: -6px 0;
+  border-radius: 9px;
+  background-color: @theme_bg_color;
+  border: 2px solid @theme_selected_bg_color;
+  box-shadow: 0 1px 2px alpha(black, 0.25);
+}
+
+scale slider:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.15);
+}
+
+scale value {
+  font-variant-numeric: tabular-nums;
+  color: alpha(@theme_fg_color, 0.75);
+  padding: 0 6px;
+  min-width: 36px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---------- Combo boxes + spin buttons ---------- */
+
+combobox button.combo,
+spinbutton {
+  min-height: 30px;
+  border-radius: 6px;
+}
+
+spinbutton entry {
+  min-height: 28px;
+  padding: 0 6px;
+}
+
+/* ---------- Shortcut entry ---------- */
+
+entry#shortcut_entry {
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ---------- Apply button ---------- */
+
+.saf-apply {
+  min-height: 42px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ---------- Sidebar scrollbar ---------- */
+
+.saf-sidebar undershoot,
+.saf-sidebar overshoot {
+  background: none;
+}
+
+/* ---------- Dim labels ---------- */
+
+.dim-label {
+  opacity: 0.65;
+  font-size: 12px;
+}

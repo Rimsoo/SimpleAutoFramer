@@ -1,13 +1,51 @@
 
 // GtkUserInterface.cpp
 #include "GtkUi.h"
+#include <gdk/gdk.h>
 #include <iostream>
 
 namespace fs = std::filesystem;
 
+namespace {
+
+// Loads the app CSS and applies it globally to the default screen.
+// Non-fatal if the file isn't found — the UI just falls back to the
+// system theme with no custom accents.
+void loadAppCss() {
+#ifdef INSTALL_DATA_DIR
+  const std::string css_path =
+      std::string(INSTALL_DATA_DIR) + "/main_window.css";
+#else
+  const std::string css_path = fs::absolute("main_window.css").string();
+#endif
+  if (!fs::exists(css_path)) {
+    std::cerr << "[saf] CSS not found at " << css_path
+              << " — skipping custom styling." << std::endl;
+    return;
+  }
+  auto provider = Gtk::CssProvider::create();
+  try {
+    provider->load_from_path(css_path);
+  } catch (const Glib::Error &e) {
+    std::cerr << "[saf] Failed to load CSS (" << css_path
+              << "): " << e.what() << std::endl;
+    return;
+  }
+  auto display = Gdk::Display::get_default();
+  if (!display)
+    return;
+  auto screen = display->get_default_screen();
+  Gtk::StyleContext::add_provider_for_screen(
+      screen, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+} // namespace
+
 GtkUi::GtkUi(Core &core)
     : app_(Gtk::Application::create("org.simple_auto_framer")),
       mainWindow_(nullptr) {
+
+  loadAppCss();
 
   // Chargement de l'interface via Glade
   auto refBuilder = Gtk::Builder::create();
