@@ -1,4 +1,4 @@
-# Maintainer: Rimsoo <your-email@example.com>
+# Maintainer: Rimso
 pkgname=simpleautoframer-git
 _pkgname=simpleautoframer
 pkgver=r1.0
@@ -6,7 +6,7 @@ pkgrel=1
 pkgdesc="Open-source auto-framing for webcams (alternative to NVIDIA Broadcast)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Rimsoo/SimpleAutoFramer"
-license=('MIT')   # Change to match your LICENSE file
+license=('MIT') # Change to match your LICENSE file
 
 depends=(
     'opencv'
@@ -46,7 +46,7 @@ source=(
 )
 sha256sums=(
     'SKIP'
-    'SKIP'   # regenerate with updpkgsums
+    'SKIP' # regenerate with updpkgsums
     'SKIP'
     'SKIP'
 )
