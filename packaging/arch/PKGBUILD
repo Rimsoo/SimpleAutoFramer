@@ -64,6 +64,17 @@ prepare() {
 
 build() {
     cd "$_pkgname"
+
+    # Prefer the distro OpenCV over /usr/local custom builds. A common Arch
+    # pitfall: /usr/local/lib/cmake/opencv4/ pins an exact CUDA version
+    # ("Found unsuitable version 13.2, required exactly 12.8") which breaks
+    # configure. /usr/lib/cmake/opencv4/ (shipped by the opencv /
+    # opencv-cuda packages) works everywhere.
+    local -a opencv_dir_arg=()
+    if [[ -z "${OpenCV_DIR:-}" && -f /usr/lib/cmake/opencv4/OpenCVConfig.cmake ]]; then
+        opencv_dir_arg=(-DOpenCV_DIR=/usr/lib/cmake/opencv4)
+    fi
+
     cmake -B build -S . \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
@@ -71,6 +82,7 @@ build() {
         -DUSE_CUDA=OFF \
         -DUSE_X11_SHORTCUTS=ON \
         -DUSE_PORTAL_SHORTCUTS=ON \
+        "${opencv_dir_arg[@]}" \
         -Wno-dev
     cmake --build build
 }
