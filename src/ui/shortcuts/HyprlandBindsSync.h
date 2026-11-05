@@ -5,15 +5,15 @@
 //
 // Why: xdg-desktop-portal-hyprland accepts BindShortcuts, but the compositor
 // only forwards a physical key once a matching `global` bind exists in its
-// config. The leading ':' in the bind argument is mandatory: the portal
-// registers non-flatpak apps with an EMPTY app_id.
+// config. The bind argument is "<app_id>:<shortcut id>"; the app registers
+// itself with the portal as SAF_APP_ID so that prefix is stable.
 //
 // Two config flavours are supported:
 //   * hyprland.lua (Hyprland >= 0.55): the binds go into a generated
 //     simpleautoframer.lua next to it, loaded by a one-line managed block:
-//         hl.bind("CTRL + ALT + 1", hl.dsp.global(":ctrl_alt_1"))
+//         hl.bind("CTRL + ALT + 1", hl.dsp.global("org.simple_auto_framer:ctrl_alt_1"))
 //   * hyprland.conf (legacy hyprlang): a managed block holding
-//         bind = CTRL ALT, 1, global, :ctrl_alt_1
+//         bind = CTRL ALT, 1, global, org.simple_auto_framer:ctrl_alt_1
 //
 // Managed blocks are delimited by marker comments so unrelated lines are
 // never touched. Symlinked configs (dotfile managers) are written through.

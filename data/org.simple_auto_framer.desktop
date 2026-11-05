@@ -7,4 +7,4 @@ Terminal=false
 Type=Application
 Categories=AudioVideo;Video;GTK;
 Keywords=auto;framing;head;tracking;tool;simple;
-StartupWMClass=simpleautoframer
+StartupWMClass=org.simple_auto_framer

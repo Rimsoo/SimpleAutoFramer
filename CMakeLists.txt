@@ -210,7 +210,7 @@ set(RESOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
     ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.glade
     ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.css
-    ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/org.simple_auto_framer.desktop
     ${CMAKE_CURRENT_SOURCE_DIR}/data/face_detection_yunet_2023mar.onnx
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall
 )
@@ -245,7 +245,7 @@ if(IS_LINUX)
         ${CMAKE_CURRENT_SOURCE_DIR}/data/face_detection_yunet_2023mar.onnx
         DESTINATION ${CMAKE_INSTALL_DATADIR}/simpleautoframer)
 
-    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/org.simple_auto_framer.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png

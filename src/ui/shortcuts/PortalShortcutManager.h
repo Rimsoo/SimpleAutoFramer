@@ -52,6 +52,9 @@ private:
   // Steps scheduled on the worker main loop.
   static gboolean onStartRequested(gpointer user_data);
   static void onBusReady(GObject *source, GAsyncResult *res, gpointer user_data);
+  static void onRegisterReply(GObject *source, GAsyncResult *res,
+                              gpointer user_data);
+  void createSession();
   static void onCreateSessionReply(GObject *source, GAsyncResult *res,
                                    gpointer user_data);
   static void onBindShortcutsReply(GObject *source, GAsyncResult *res,

@@ -37,7 +37,7 @@ void loadAppCss() {
 } // namespace
 
 GtkUi::GtkUi(Core &core)
-    : app_(Gtk::Application::create("org.simple_auto_framer")),
+    : app_(Gtk::Application::create(SAF_APP_ID)),
       mainWindow_(nullptr) {
 
   // Single instance: if another SimpleAutoFramer is already running, ask it

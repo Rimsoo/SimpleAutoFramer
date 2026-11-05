@@ -11,7 +11,11 @@
 //   application can touch widgets safely.
 //
 // Flow on the worker thread:
-//   1. g_bus_get (async)                  -> onBusReady
+//   1. private session-bus connection     -> onBusReady
+//      Registry.Register(app_id)          -> onRegisterReply
+//      Without the registration, the portal derives the app id from the
+//      launcher's systemd scope (terminal, IDE…), so the shortcut ids seen
+//      by the compositor would change with how the app was started.
 //   2. CreateSession call (async)         -> onCreateSessionReply
 //      The reply gives a request object path; we also subscribe to the
 //      Request::Response signal on that path and wait for it in
@@ -28,6 +32,8 @@
 // user will cancel.
 
 #include "PortalShortcutManager.h"
+
+#include <config.h>
 
 #include <algorithm>
 #include <cctype>
@@ -217,8 +223,26 @@ gboolean PortalShortcutManager::onStartRequested(gpointer user_data) {
     g_main_loop_quit(self->m_loop);
     return G_SOURCE_REMOVE;
   }
-  g_bus_get(G_BUS_TYPE_SESSION, /*cancellable=*/nullptr,
-            &PortalShortcutManager::onBusReady, self);
+  // A private connection: Registry.Register must be the first portal call
+  // on its connection, and GTK may already have used the shared one.
+  GError *err = nullptr;
+  gchar *address =
+      g_dbus_address_get_for_bus_sync(G_BUS_TYPE_SESSION, nullptr, &err);
+  if (!address) {
+    std::cerr << "[portal] No session bus: " << (err ? err->message : "?")
+              << std::endl;
+    if (err)
+      g_error_free(err);
+    g_main_loop_quit(self->m_loop);
+    return G_SOURCE_REMOVE;
+  }
+  g_dbus_connection_new_for_address(
+      address,
+      static_cast<GDBusConnectionFlags>(
+          G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT |
+          G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+      nullptr, nullptr, &PortalShortcutManager::onBusReady, self);
+  g_free(address);
   return G_SOURCE_REMOVE;
 }
 
@@ -227,7 +251,7 @@ void PortalShortcutManager::onBusReady(GObject * /*source*/, GAsyncResult *res,
   auto *self = static_cast<PortalShortcutManager *>(user_data);
 
   GError *err = nullptr;
-  self->m_conn = g_bus_get_finish(res, &err);
+  self->m_conn = g_dbus_connection_new_for_address_finish(res, &err);
   if (!self->m_conn) {
     std::cerr << "[portal] Failed to connect to session bus: "
               << (err ? err->message : "unknown") << std::endl;
@@ -236,7 +260,40 @@ void PortalShortcutManager::onBusReady(GObject * /*source*/, GAsyncResult *res,
     g_main_loop_quit(self->m_loop);
     return;
   }
+  g_dbus_connection_set_exit_on_close(self->m_conn, FALSE);
 
+  g_dbus_connection_call(
+      self->m_conn, PORTAL_BUS, PORTAL_PATH,
+      "org.freedesktop.host.portal.Registry", "Register",
+      g_variant_new("(sa{sv})", SAF_APP_ID, nullptr), nullptr,
+      G_DBUS_CALL_FLAGS_NONE, PORTAL_CALL_TIMEOUT_MS, nullptr,
+      &PortalShortcutManager::onRegisterReply, self);
+}
+
+void PortalShortcutManager::onRegisterReply(GObject *source,
+                                            GAsyncResult *res,
+                                            gpointer user_data) {
+  auto *self = static_cast<PortalShortcutManager *>(user_data);
+  GError *err = nullptr;
+  GVariant *reply =
+      g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), res, &err);
+  if (reply) {
+    g_variant_unref(reply);
+    std::cerr << "[portal] Registered as " << SAF_APP_ID << "." << std::endl;
+  } else {
+    // xdg-desktop-portal < 1.19: the app id comes from the launcher.
+    std::cerr << "[portal] Registry.Register failed ("
+              << (err ? err->message : "?")
+              << "); shortcut ids may depend on how the app was launched."
+              << std::endl;
+    if (err)
+      g_error_free(err);
+  }
+  self->createSession();
+}
+
+void PortalShortcutManager::createSession() {
+  auto *self = this;
   const std::string handleToken = randomToken("saf_req");
   self->m_sessionToken = randomToken("saf_sess");
   const std::string handlePath = computeHandlePath(self->m_conn, handleToken);
@@ -620,6 +677,9 @@ void PortalShortcutManager::cleanupOnWorker() {
     m_sessionHandle.clear();
   }
 
+  // Private connection: flush the Close call, then shut it down.
+  g_dbus_connection_flush_sync(m_conn, nullptr, nullptr);
+  g_dbus_connection_close_sync(m_conn, nullptr, nullptr);
   g_object_unref(m_conn);
   m_conn = nullptr;
 }

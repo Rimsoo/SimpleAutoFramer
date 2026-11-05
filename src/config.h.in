@@ -3,6 +3,10 @@
 
 #define SAF_VERSION "@PROJECT_VERSION@"
 
+// GApplication id, desktop file name and the app id we register with
+// xdg-desktop-portal (global shortcuts are keyed by it).
+#define SAF_APP_ID "org.simple_auto_framer"
+
 #ifdef INSTALL_MODE
     #define INSTALL_DATA_DIR "@SAF_INSTALL_DATA_DIR@"
 #endif

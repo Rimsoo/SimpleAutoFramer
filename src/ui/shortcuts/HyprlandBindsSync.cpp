@@ -2,6 +2,8 @@
 
 #include "HyprlandBindsSync.h"
 
+#include <config.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -198,8 +200,8 @@ std::string buildConfBlock(const std::vector<ShortcutDescriptor> &sc) {
   for (const auto &d : sc) {
     auto [mods, key] = splitAccel(d.defaultAccel);
     if (!key.empty())
-      os << "bind = " << join(mods, " ") << ", " << key << ", global, :"
-         << d.id << '\n';
+      os << "bind = " << join(mods, " ") << ", " << key << ", global, "
+         << SAF_APP_ID << ":" << d.id << '\n';
   }
   os << CONF_END << '\n';
   return os.str();
@@ -215,7 +217,7 @@ std::string buildLuaBindsFile(const std::vector<ShortcutDescriptor> &sc) {
       continue;
     mods.push_back(key);
     os << "hl.bind(" << luaQuote(join(mods, " + ")) << ", hl.dsp.global("
-       << luaQuote(":" + d.id) << "))\n";
+       << luaQuote(std::string(SAF_APP_ID) + ":" + d.id) << "))\n";
   }
   return os.str();
 }

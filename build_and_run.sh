@@ -10,6 +10,15 @@ echo "==> Syncing submodules"
 git submodule update --init --recursive
 
 
+# xdg-desktop-portal only accepts our app id (needed for global shortcuts)
+# when a matching desktop file is installed.
+DESKTOP_ID="org.simple_auto_framer.desktop"
+if [ ! -e "/usr/share/applications/$DESKTOP_ID" ] &&
+   [ ! -e "$HOME/.local/share/applications/$DESKTOP_ID" ]; then
+    echo "==> Installing $DESKTOP_ID to ~/.local/share/applications"
+    install -Dm0644 "data/$DESKTOP_ID" "$HOME/.local/share/applications/$DESKTOP_ID"
+fi
+
 mkdir -p "$BUILD_DIR"
 pushd "$BUILD_DIR" >/dev/null
 

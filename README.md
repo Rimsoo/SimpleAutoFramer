@@ -95,13 +95,15 @@ keys like `KP_Add` or `F5`.
   (the managed block is then removed) and add for example:
 
   ```lua
-  hl.bind("CTRL + ALT + 1", hl.dsp.global(":ctrl_alt_1"))
+  hl.bind("CTRL + SHIFT + 2", hl.dsp.global("org.simple_auto_framer:ctrl_shift_2"))
   ```
 
-  The leading `:` is required: the portal registers non-flatpak apps with an
-  empty app id. The ids are printed in the terminal when the app starts.
-  If a shortcut still doesn't fire, restart the portal:
-  `systemctl --user restart xdg-desktop-portal-hyprland`.
+  The app registers with the portal as `org.simple_auto_framer`, which
+  requires `org.simple_auto_framer.desktop` to be installed (the package and
+  `install.sh` do it; `build_and_run.sh` copies it to
+  `~/.local/share/applications`). `hyprctl globalshortcuts` lists what the
+  portal knows. Hyprland matches the unshifted key, so shortcuts are stored
+  as `Ctrl+Shift+2`, not `Ctrl+Shift+at`.
 
 ## CI
 

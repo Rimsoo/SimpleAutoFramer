@@ -722,6 +722,41 @@ void MainWindow::setupAppIndicator() {
 
 namespace {
 
+// Rewrite "Ctrl+Shift+at" as "Ctrl+Shift+2": compositors (Hyprland), X11
+// grabs and GTK accelerators all match the key's unshifted keysym, with
+// Shift as a separate modifier. The base keysym depends on the layout, so
+// it's looked up in the current keymap. Unknown keys are left untouched.
+std::string canonicalAccel(const std::string &accel) {
+  const auto pos = accel.rfind('+');
+  const std::string prefix = pos == std::string::npos ? "" : accel.substr(0, pos + 1);
+  const std::string key = pos == std::string::npos ? accel : accel.substr(pos + 1);
+  if (key.empty())
+    return accel;
+
+  const guint keyval = gdk_keyval_from_name(key.c_str());
+  GdkDisplay *display = gdk_display_get_default();
+  GdkKeymap *keymap = display ? gdk_keymap_get_for_display(display) : nullptr;
+  if (keyval == GDK_KEY_VoidSymbol || keyval == 0 || !keymap)
+    return accel;
+
+  GdkKeymapKey *keys = nullptr;
+  gint n = 0;
+  if (!gdk_keymap_get_entries_for_keyval(keymap, keyval, &keys, &n) || n == 0)
+    return accel;
+  guint base = 0;
+  const bool ok = gdk_keymap_translate_keyboard_state(
+      keymap, keys[0].keycode, static_cast<GdkModifierType>(0), keys[0].group,
+      &base, nullptr, nullptr, nullptr);
+  g_free(keys);
+
+  // Letters keep the usual uppercase spelling ("Ctrl+K").
+  base = gdk_keyval_to_upper(base);
+  if (!ok || base == 0 || base == keyval)
+    return accel;
+  const char *name = gdk_keyval_name(base);
+  return name ? prefix + name : accel;
+}
+
 // Convert a GDK key event into the SimpleAutoFramer accelerator string
 // ("Ctrl+Alt+K", "KP_Add", "F5", …). Returns an empty string for modifier-
 // only presses (Ctrl alone, etc.) so the capture dialog can keep listening.
@@ -773,7 +808,7 @@ std::string gdkEventToAccel(const GdkEventKey &ev) {
     return "";
 
   append(keyName);
-  return out;
+  return canonicalAccel(out);
 }
 
 } // namespace
@@ -858,7 +893,7 @@ void MainWindow::setupShortcuts() {
   for (const auto &profile : profilesManager->getProfileList()) {
     if (profile.shortcut.empty())
       continue;
-    hotkeys->RegisterHotkey(profile.shortcut, [this, profile]() {
+    hotkeys->RegisterHotkey(canonicalAccel(profile.shortcut), [this, profile]() {
       std::cerr << "[saf] shortcut '" << profile.shortcut
                 << "' → switching to profile '" << profile.name << "'"
                 << std::endl;
