@@ -1,0 +1,82 @@
+# Builds the AppImage and attaches it to a Forgejo release.
+#   * push a tag "vX.Y.Z"   -> build + create/update the release
+#   * manual dispatch       -> build + smoke test only (nothing published)
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  appimage:
+    name: AppImage
+    runs-on: docker
+    container:
+      # Old glibc base so the AppImage runs on most distributions.
+      image: ubuntu:22.04
+    steps:
+      # Plain git: Ubuntu 22.04's Node.js is too old for actions/checkout.
+      - name: Checkout
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git
+          git clone "${{ github.server_url }}/${{ github.repository }}.git" .
+          git checkout -q "${{ github.sha }}"
+          git submodule update --init --recursive
+
+      - name: Build AppImage
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) VERSION="${GITHUB_REF#refs/tags/v}" ;;
+            *)            VERSION="$(git describe --tags --always)" ;;
+          esac
+          packaging/appimage/build-appimage.sh "$VERSION"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TOKEN: ${{ github.token }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+        run: |
+          apt-get install -y --no-install-recommends jq
+          TAG="${GITHUB_REF#refs/tags/}"
+          auth=(-H "Authorization: token $TOKEN")
+          read -r -d '' BODY <<'NOTES' || true
+          ### AppImage
+
+          ```bash
+          chmod +x SimpleAutoFramer-*-x86_64.AppImage
+          ./SimpleAutoFramer-*-x86_64.AppImage
+          ```
+
+          Needs the `v4l2loopback` kernel module on the host (it provides the
+          virtual camera):
+
+          ```bash
+          sudo modprobe v4l2loopback devices=1 video_nr=20 card_label=AutoFrameCam exclusive_caps=1
+          ```
+
+          The AppImage runs the YuNet detector on the CPU. For the GPU path,
+          use a native build with a CUDA-enabled OpenCV (Arch: AUR
+          `simpleautoframer-git` + `opencv-cuda`).
+          NOTES
+
+          id=$(curl -fsS "${auth[@]}" "$API/releases/tags/$TAG" | jq -r .id || true)
+          if [ -z "$id" ] || [ "$id" = null ]; then
+            id=$(jq -n --arg t "$TAG" --arg b "$BODY" \
+                   '{tag_name: $t, name: ("SimpleAutoFramer " + $t), body: $b}' \
+                 | curl -fsS -X POST "${auth[@]}" -H "Content-Type: application/json" \
+                     -d @- "$API/releases" | jq -r .id)
+          fi
+          for f in dist/*.AppImage; do
+            name=$(basename "$f")
+            # Replace an asset of the same name when re-running a tag build.
+            old=$(curl -fsS "${auth[@]}" "$API/releases/$id/assets" \
+                  | jq -r --arg n "$name" '.[] | select(.name == $n) | .id')
+            [ -n "$old" ] && curl -fsS -X DELETE "${auth[@]}" "$API/releases/$id/assets/$old"
+            curl -fsS -X POST "${auth[@]}" -F "attachment=@$f" \
+                 "$API/releases/$id/assets?name=$name" >/dev/null
+            echo "Uploaded $name to release $TAG"
+          done

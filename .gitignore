@@ -52,3 +52,7 @@ packaging/arch/*.log
 .DS_Store
 Thumbs.db
 simpleautoframer.config.json
+
+# AppImage build
+.appimage-build/
+dist/

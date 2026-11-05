@@ -1,4 +1,5 @@
 #include "Core.h"
+#include "Paths.h"
 #include "UiFactory.h"
 #include <atomic>
 #include <config.h>
@@ -58,6 +59,8 @@ int main(int argc, char *argv[]) {
       return 0;
     }
   }
+
+  saf::integrateAppImage();
 
   std::signal(SIGINT, request_quit);
   std::signal(SIGTERM, request_quit);
