@@ -5,6 +5,7 @@
 #include <chrono>
 #include <config.h>
 #include <iostream>
+#include <opencv2/core/cuda.hpp>
 
 Core::Core()
     : ui_(nullptr), capturingRunning_(false),
@@ -37,35 +38,13 @@ bool Core::init() {
     return false;
   }
 
-#if defined(CV_VERSION_MAJOR) && CV_VERSION_MAJOR >= 5
-  // OpenCV 5 removed the Caffe importer from the dnn module, so the bundled
-  // res10 SSD Caffe model can no longer be loaded. The DNN detection path is
-  // optional: leaving faceNet_ empty makes processFrame() fall back to the
-  // Haar Cascade detector, so face tracking keeps working.
-  std::cerr << "[core] OpenCV 5 : modèle DNN Caffe non supporté, "
-               "utilisation du Haar Cascade."
-            << std::endl;
-#else
-  // Chargement du modèle DNN res10_300x300_ssd_iter_140000
-  const std::string dnn_proto_path = saf::resourcePath("deploy.prototxt");
-  const std::string dnn_model_path =
-      saf::resourcePath("res10_300x300_ssd_iter_140000.caffemodel");
-  try {
-    faceNet_ = cv::dnn::readNetFromCaffe(dnn_proto_path, dnn_model_path);
-#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
-    faceNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-    faceNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
-#else
-    faceNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-    faceNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-#endif
-  } catch (const cv::Exception &ex) {
-    const std::string msg =
-        std::string("Erreur lors du chargement du modèle DNN : ") + ex.what();
-    std::cerr << msg << std::endl;
-    // Not a fatal error: Haar Cascade is still available.
-  }
-#endif
+  // YuNet (ONNX) face detector: far more accurate than Haar and fast even on
+  // CPU. Optional: without it we fall back to the Haar Cascade.
+  yunetModelPath_ = saf::resourcePath("face_detection_yunet_2023mar.onnx");
+  if (!createYuNet(cv::cuda::getCudaEnabledDeviceCount() > 0) &&
+      !createYuNet(false))
+    std::cerr << "[core] YuNet indisponible, utilisation du Haar Cascade."
+              << std::endl;
 
   initialized_ = true;
   return true;
@@ -91,6 +70,19 @@ void Core::openCaptureCamera() {
     } catch (const cv::Exception &ex) {
       error = std::string("Erreur OpenCV à l'ouverture de la caméra : ") +
               ex.what();
+    }
+    if (error.empty() && cap_.isOpened()) {
+      // OpenCV defaults to 640x480 YUYV; cropping into that and scaling up
+      // looks blurry. Ask for 1080p MJPG (USB bandwidth allows 30 fps); the
+      // driver falls back to the closest supported mode.
+      cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+      cap_.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
+      cap_.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+      cap_.set(cv::CAP_PROP_FPS, 30);
+      std::cerr << "[core] Caméra /dev/video" << index << " : "
+                << cap_.get(cv::CAP_PROP_FRAME_WIDTH) << "x"
+                << cap_.get(cv::CAP_PROP_FRAME_HEIGHT) << " @ "
+                << cap_.get(cv::CAP_PROP_FPS) << " fps" << std::endl;
     }
     if (error.empty() && !cap_.isOpened())
       error = "Erreur : impossible d'ouvrir la caméra /dev/video" +
@@ -230,66 +222,93 @@ T smoothValue(const T &current, const T &last, double factor) {
   return factor * current + (1 - factor) * last;
 }
 
-void Core::detectFaces(const cv::Mat &frame, std::vector<cv::Rect> &faces,
-                       bool use_dnn) {
-  if (!use_dnn) {
-    // Haar Cascade (CPU) on a downscaled grayscale image for speed.
-    const double scale = frame.cols > 640 ? 640.0 / frame.cols : 1.0;
-    cv::Mat gray, small;
-    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-    cv::resize(gray, small, cv::Size(), scale, scale, cv::INTER_AREA);
-    cv::equalizeHist(small, small);
-    const int minSize = std::max(24, static_cast<int>(small.cols * 0.08));
-    faceCascade_.detectMultiScale(small, faces, 1.1, 4, 0,
-                                  cv::Size(minSize, minSize));
-    for (auto &f : faces) {
-      f = cv::Rect(cvRound(f.x / scale), cvRound(f.y / scale),
-                   cvRound(f.width / scale), cvRound(f.height / scale));
-    }
+bool Core::createYuNet(bool gpu) {
+  try {
+    const int backend = gpu ? cv::dnn::DNN_BACKEND_CUDA
+                            : cv::dnn::DNN_BACKEND_OPENCV;
+    const int target = gpu ? cv::dnn::DNN_TARGET_CUDA : cv::dnn::DNN_TARGET_CPU;
+    faceDetector_ = cv::FaceDetectorYN::create(
+        yunetModelPath_, "", cv::Size(320, 320), 0.6f, 0.3f, 50, backend,
+        target);
+  } catch (const cv::Exception &ex) {
+    std::cerr << "[core] Chargement de YuNet (" << (gpu ? "GPU" : "CPU")
+              << ") impossible : " << ex.what() << std::endl;
+    faceDetector_.reset();
+    return false;
+  }
+  yunetOnGpu_ = gpu;
+  std::cerr << "[core] Détecteur YuNet chargé (" << (gpu ? "GPU CUDA" : "CPU")
+            << ")." << std::endl;
+  return true;
+}
+
+void Core::detectFacesYuNet(const cv::Mat &frame,
+                            std::vector<cv::Rect> &faces) {
+  // Detect on a ~640 px wide copy: plenty for a face filling a webcam frame,
+  // and several times cheaper than full resolution.
+  const double scale = frame.cols > 640 ? 640.0 / frame.cols : 1.0;
+  cv::Mat small;
+  if (scale < 1.0)
+    cv::resize(frame, small, cv::Size(), scale, scale, cv::INTER_AREA);
+  else
+    small = frame;
+
+  cv::Mat detections;
+  try {
+    if (faceDetector_->getInputSize() != small.size())
+      faceDetector_->setInputSize(small.size());
+    faceDetector_->setScoreThreshold(
+        static_cast<float>(profilesManager_.getDetectionConfidence()));
+    faceDetector_->detect(small, detections);
+  } catch (const cv::Exception &ex) {
+    // Typically a CUDA/cuDNN mismatch, only visible at the first inference.
+    std::cerr << "[core] YuNet a échoué" << (yunetOnGpu_ ? " sur GPU" : "")
+              << " : " << ex.what() << std::endl;
+    if (!yunetOnGpu_ || !createYuNet(false))
+      faceDetector_.reset();
     return;
   }
 
-  // DNN (CPU or CUDA). Wrapped in try/catch: a broken CUDA setup (version
-  // mismatch, OOM, cuDNN assert) must not take the whole app down.
-  try {
-    cv::Mat blob =
-        cv::dnn::blobFromImage(frame, 1.0, cv::Size(300, 300),
-                               cv::Scalar(104.0, 177.0, 123.0), false, false);
-    faceNet_.setInput(blob);
-    cv::Mat detections = faceNet_.forward();
-    const float conf_threshold =
-        static_cast<float>(profilesManager_.getDetectionConfidence());
+  // Each row: x, y, w, h, 5 landmarks (x, y), score.
+  const cv::Rect bounds(0, 0, frame.cols, frame.rows);
+  for (int i = 0; i < detections.rows; ++i) {
+    const float *d = detections.ptr<float>(i);
+    cv::Rect r(cvRound(d[0] / scale), cvRound(d[1] / scale),
+               cvRound(d[2] / scale), cvRound(d[3] / scale));
+    r &= bounds;
+    if (r.area() > 0)
+      faces.push_back(r);
+  }
+}
 
-    cv::Mat detectionMat(detections.size[2], detections.size[3], CV_32F,
-                         detections.ptr<float>());
-    const cv::Rect bounds(0, 0, frame.cols, frame.rows);
-    for (int i = 0; i < detectionMat.rows; i++) {
-      float confidence = detectionMat.at<float>(i, 2);
-      if (confidence > conf_threshold) {
-        int x1 = static_cast<int>(detectionMat.at<float>(i, 3) * frame.cols);
-        int y1 = static_cast<int>(detectionMat.at<float>(i, 4) * frame.rows);
-        int x2 = static_cast<int>(detectionMat.at<float>(i, 5) * frame.cols);
-        int y2 = static_cast<int>(detectionMat.at<float>(i, 6) * frame.rows);
-        cv::Rect r = cv::Rect(x1, y1, x2 - x1, y2 - y1) & bounds;
-        if (r.area() > 0)
-          faces.push_back(r);
-      }
-    }
-  } catch (const std::exception &e) {
-    static bool warned = false;
-    if (!warned) {
-      warned = true;
-      std::cerr << "[core] DNN inference failed: " << e.what() << std::endl;
-    }
+void Core::detectFaces(const cv::Mat &frame, std::vector<cv::Rect> &faces,
+                       bool use_yunet) {
+  if (use_yunet) {
+    detectFacesYuNet(frame, faces);
+    return;
+  }
+
+  // Haar Cascade (CPU) on a downscaled grayscale image for speed.
+  const double scale = frame.cols > 640 ? 640.0 / frame.cols : 1.0;
+  cv::Mat gray, small;
+  cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+  cv::resize(gray, small, cv::Size(), scale, scale, cv::INTER_AREA);
+  cv::equalizeHist(small, small);
+  const int minSize = std::max(24, static_cast<int>(small.cols * 0.08));
+  faceCascade_.detectMultiScale(small, faces, 1.1, 4, 0,
+                                cv::Size(minSize, minSize));
+  for (auto &f : faces) {
+    f = cv::Rect(cvRound(f.x / scale), cvRound(f.y / scale),
+                 cvRound(f.width / scale), cvRound(f.height / scale));
   }
 }
 
 bool Core::processFrame(cv::Mat &frame) {
-  const bool use_dnn =
-      profilesManager_.getModelSelection() == 1 && !faceNet_.empty();
+  const bool use_yunet =
+      profilesManager_.getModelSelection() == 1 && faceDetector_;
 
   std::vector<cv::Rect> faces;
-  detectFaces(frame, faces, use_dnn);
+  detectFaces(frame, faces, use_yunet);
 
   const double smoothing = profilesManager_.getSmoothingFactor();
   if (!faces.empty()) {
@@ -335,17 +354,7 @@ bool Core::processFrame(cv::Mat &frame) {
 
   const cv::Size target{target_w, target_h};
   cv::Mat output;
-#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
-  if (use_dnn) {
-    cv::cuda::GpuMat gpu_frame, gpu_resized;
-    gpu_frame.upload(frame);
-    cv::cuda::resize(gpu_frame(crop_region), gpu_resized, target);
-    gpu_resized.download(output);
-  } else
-#endif
-  {
-    cv::resize(frame(crop_region), output, target, 0, 0, cv::INTER_LINEAR);
-  }
+  cv::resize(frame(crop_region), output, target, 0, 0, cv::INTER_LINEAR);
   if (output.empty())
     return false;
 

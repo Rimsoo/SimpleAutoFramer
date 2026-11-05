@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.20)
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
-option(USE_CUDA              "Use OpenCV CUDA modules for the DNN path if present" OFF)
 option(INSTALL_MODE          "Build paths for system install (/usr/share/...)"    OFF)
 option(INSTALL_UNINSTALLER   "Install the simpleautoframer-uninstall helper (not for distro packages)" ON)
 
@@ -60,19 +59,6 @@ set(SAF_OPENCV_LIBS ${OpenCV_LIBS})
 if(OpenCV_VERSION_MAJOR GREATER_EQUAL 5)
     find_package(OpenCV REQUIRED COMPONENTS xobjdetect)
     list(APPEND SAF_OPENCV_LIBS ${OpenCV_LIBS})
-endif()
-
-# Optional GPU path for the DNN detector (Core.cpp guards it with
-# SAF_HAS_OPENCV_CUDA). Off by default so packages build against any OpenCV.
-set(SAF_HAS_OPENCV_CUDA FALSE)
-if(USE_CUDA)
-    find_package(OpenCV OPTIONAL_COMPONENTS cudaimgproc cudawarping)
-    if(OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND)
-        set(SAF_HAS_OPENCV_CUDA TRUE)
-        message(STATUS "OpenCV CUDA modules found (cudaimgproc + cudawarping).")
-    else()
-        message(WARNING "USE_CUDA=ON but OpenCV has no CUDA modules; using CPU.")
-    endif()
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -170,14 +156,6 @@ target_link_libraries(simpleautoframer PRIVATE
     Threads::Threads
 )
 
-if(SAF_HAS_OPENCV_CUDA)
-    target_compile_definitions(simpleautoframer PRIVATE SAF_HAS_OPENCV_CUDA=1)
-    target_link_libraries(simpleautoframer PRIVATE
-        opencv_cudaimgproc opencv_cudawarping)
-else()
-    target_compile_definitions(simpleautoframer PRIVATE SAF_HAS_OPENCV_CUDA=0)
-endif()
-
 # ---- Linux link deps
 if(IS_LINUX)
     target_compile_definitions(simpleautoframer PUBLIC IS_LINUX SAF_LINUX=1)
@@ -233,8 +211,7 @@ set(RESOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.glade
     ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.css
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop
-    ${CMAKE_CURRENT_SOURCE_DIR}/data/res10_300x300_ssd_iter_140000.caffemodel
-    ${CMAKE_CURRENT_SOURCE_DIR}/data/deploy.prototxt
+    ${CMAKE_CURRENT_SOURCE_DIR}/data/face_detection_yunet_2023mar.onnx
     ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall
 )
 
@@ -265,8 +242,7 @@ if(IS_LINUX)
         ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.png
         ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.glade
         ${CMAKE_CURRENT_SOURCE_DIR}/data/main_window.css
-        ${CMAKE_CURRENT_SOURCE_DIR}/data/res10_300x300_ssd_iter_140000.caffemodel
-        ${CMAKE_CURRENT_SOURCE_DIR}/data/deploy.prototxt
+        ${CMAKE_CURRENT_SOURCE_DIR}/data/face_detection_yunet_2023mar.onnx
         DESTINATION ${CMAKE_INSTALL_DATADIR}/simpleautoframer)
 
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer.desktop

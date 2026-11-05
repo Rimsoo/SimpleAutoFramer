@@ -17,13 +17,8 @@
 #if defined(CV_VERSION_MAJOR) && CV_VERSION_MAJOR >= 5
 #include <opencv2/xobjdetect.hpp>
 #endif
+#include <opencv2/objdetect/face.hpp>
 #include <thread>
-
-#if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
-#include <opencv2/cudaarithm.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/cudawarping.hpp>
-#endif
 
 class Core {
 public:
@@ -55,7 +50,10 @@ private:
   // `frame` contient l'image recadrée (BGR) pour la prévisualisation.
   bool processFrame(cv::Mat &frame);
   void detectFaces(const cv::Mat &frame, std::vector<cv::Rect> &faces,
-                   bool use_dnn);
+                   bool use_yunet);
+  void detectFacesYuNet(const cv::Mat &frame, std::vector<cv::Rect> &faces);
+  // Create the YuNet detector, on the GPU (CUDA/cuDNN) when available.
+  bool createYuNet(bool gpu);
 
   bool init();
 
@@ -78,7 +76,9 @@ private:
   // Modèles de détection et données de suivi
   bool initialized_ = false;
   cv::CascadeClassifier faceCascade_;
-  cv::dnn::Net faceNet_;
+  cv::Ptr<cv::FaceDetectorYN> faceDetector_;
+  std::string yunetModelPath_;
+  bool yunetOnGpu_ = false;
   cv::Point2f lastCenter_{0.5f, 0.5f};
   double lastZoom_ = 1.5;
 

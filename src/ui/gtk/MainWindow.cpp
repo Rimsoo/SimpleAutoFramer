@@ -362,10 +362,10 @@ void MainWindow::setupAdjustments() {
 void MainWindow::setupModelSelection() {
   Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
   Gtk::TreeModel::Row row = *store->append();
-  row[m_columns.name] = "Haar Cascade (CPU)";
+  row[m_columns.name] = "Haar Cascade (rapide, peu précis)";
   row[m_columns.id] = 0;
   row = *store->append();
-  row[m_columns.name] = "DNN (GPU)";
+  row[m_columns.name] = "YuNet (précis, GPU si dispo)";
   row[m_columns.id] = 1;
 
   m_model_selection_combo->set_model(store);

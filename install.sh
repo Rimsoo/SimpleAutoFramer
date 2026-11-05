@@ -148,8 +148,7 @@ cmake .. \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DINSTALL_MODE=ON \
     -DUSE_X11_SHORTCUTS=ON \
-    -DUSE_PORTAL_SHORTCUTS=ON \
-    -DUSE_CUDA=OFF
+    -DUSE_PORTAL_SHORTCUTS=ON
 
 echo "==> Building…"
 cmake --build . --parallel "$(nproc)"

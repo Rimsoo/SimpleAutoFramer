@@ -15,7 +15,7 @@ public:
     // Paramètres
     int camera_selection = 0;
     double smoothing_factor = 0.05;
-    double detection_confidence = 0.3;
+    double detection_confidence = 0.6;
     int model_selection = 1;
     double zoom_base = 1.5;
     double zoom_multiplier = 1.0;

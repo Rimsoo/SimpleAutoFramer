@@ -35,7 +35,7 @@ Run `./install.sh --help` for options. Uninstall with
 
 ### Dependencies
 
-CMake ≥ 3.20, a C++20 compiler, OpenCV 4 or 5 (with `xobjdetect` on 5),
+CMake ≥ 3.20, a C++20 compiler, OpenCV ≥ 4.8 or 5 (with `xobjdetect` on 5),
 gtkmm-3.0, ayatana-appindicator3, nlohmann-json, libX11/libXi, GLib/GIO,
 and the `v4l2loopback` kernel module.
 
@@ -61,9 +61,11 @@ Then select **AutoFrameCam** as the camera in your video app.
 - Closing the window keeps the app running in the tray. Launching
   `simpleautoframer` again brings the window back (handy when your desktop has
   no tray), and the tray menu's **Quit** exits.
-- The *Haar Cascade* detector works everywhere. The *DNN* detector needs
-  OpenCV 4: OpenCV 5 dropped the Caffe importer, so with OpenCV 5 the app
-  falls back to Haar automatically.
+- Two face detectors: **YuNet** (default, accurate; ONNX model from
+  [opencv_zoo](https://github.com/opencv/opencv_zoo), MIT) and the older
+  *Haar Cascade*. YuNet runs on the GPU when OpenCV has CUDA + cuDNN
+  (e.g. Arch's `opencv-cuda`) and falls back to the CPU otherwise. It needs
+  OpenCV ≥ 4.8; with older versions the app uses Haar.
 
 If the virtual camera is missing:
 
@@ -116,5 +118,5 @@ the jobs wait forever with *"No matching online runner"*. See
 - [x] GPU support
 - [x] Configuration file
 - [x] Config shortcuts
-- [ ] Modern DNN detector for OpenCV 5 (YuNet)
+- [x] YuNet face detector (GPU when available)
 - [ ] Add filters

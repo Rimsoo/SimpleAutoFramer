@@ -34,7 +34,7 @@ optdepends=(
     'xdg-desktop-portal-gnome: portal backend for GNOME (>=47 recommended)'
     'xdg-desktop-portal-hyprland: portal backend for Hyprland'
     'xdg-desktop-portal-wlr: portal backend for Sway/other wlroots WMs'
-    'cuda: optional GPU acceleration (rebuild with -DUSE_CUDA=ON)'
+    'opencv-cuda: run the YuNet face detector on an NVIDIA GPU'
 )
 
 provides=("$_pkgname")
@@ -74,7 +74,6 @@ build() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DINSTALL_MODE=ON \
-        -DUSE_CUDA=OFF \
         -DUSE_X11_SHORTCUTS=ON \
         -DUSE_PORTAL_SHORTCUTS=ON \
         -DINSTALL_UNINSTALLER=OFF \

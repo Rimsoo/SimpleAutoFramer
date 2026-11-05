@@ -24,7 +24,7 @@ pkgbase = simpleautoframer-git
 	optdepends = xdg-desktop-portal-gnome: portal backend for GNOME (>=47 recommended)
 	optdepends = xdg-desktop-portal-hyprland: portal backend for Hyprland
 	optdepends = xdg-desktop-portal-wlr: portal backend for Sway/other wlroots WMs
-	optdepends = cuda: optional GPU acceleration (rebuild with -DUSE_CUDA=ON)
+	optdepends = opencv-cuda: run the YuNet face detector on an NVIDIA GPU
 	provides = simpleautoframer
 	conflicts = simpleautoframer
 	backup = etc/modprobe.d/v4l2loopback-simpleautoframer.conf
