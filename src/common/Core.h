@@ -10,6 +10,12 @@
 #include <mutex>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/opencv.hpp>
+// OpenCV 5 moved the classic Haar/LBP cv::CascadeClassifier out of the core
+// objdetect module into the contrib "xobjdetect" module. On OpenCV 4 it is
+// still provided transitively via <opencv2/opencv.hpp>.
+#if defined(CV_VERSION_MAJOR) && CV_VERSION_MAJOR >= 5
+#include <opencv2/xobjdetect.hpp>
+#endif
 #include <thread>
 
 #if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA

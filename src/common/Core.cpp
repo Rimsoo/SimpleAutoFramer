@@ -62,10 +62,20 @@ bool Core::init() {
   }
 
   // Chargement du modèle DNN res10_300x300_ssd_iter_140000
-  const std::string dnn_proto_path = resourcePath("deploy.prototxt");
-  const std::string dnn_model_path =
+  [[maybe_unused]] const std::string dnn_proto_path =
+      resourcePath("deploy.prototxt");
+  [[maybe_unused]] const std::string dnn_model_path =
       resourcePath("res10_300x300_ssd_iter_140000.caffemodel");
 
+#if defined(CV_VERSION_MAJOR) && CV_VERSION_MAJOR >= 5
+  // OpenCV 5 removed the Caffe importer from the dnn module, so the bundled
+  // res10 SSD Caffe model can no longer be loaded. The DNN detection path is
+  // optional: leaving faceNet_ empty makes processFrame() fall back to the
+  // Haar Cascade detector, so face tracking keeps working.
+  std::cerr << "[core] OpenCV 5: modele DNN Caffe non supporte, "
+               "utilisation du Haar Cascade."
+            << std::endl;
+#else
   try {
     faceNet_ = cv::dnn::readNetFromCaffe(dnn_proto_path, dnn_model_path);
 #if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
@@ -83,6 +93,7 @@ bool Core::init() {
     std::cerr << msg << std::endl;
     // Not a fatal error: Haar Cascade is still available.
   }
+#endif
 
   initialized = true;
   return true;
@@ -200,18 +211,25 @@ bool Core::processFrame(cv::Mat &frame) {
   cv::Mat processedOutput;
   int current_model = profilesManager_.getModelSelection();
 
+  // The DNN detector is only usable when a network was actually loaded. On
+  // OpenCV 5 (no Caffe importer) faceNet_ stays empty, so we transparently
+  // fall back to the Haar Cascade detector — otherwise no faces would ever be
+  // detected and the app would appear to "not work".
+  const bool use_dnn = (current_model == 1) && !faceNet_.empty();
+
 #if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
   cv::cuda::GpuMat gpu_frame, gpu_cropped, gpu_resized, gpu_processed;
-  gpu_frame.upload(frame);
+  if (use_dnn)
+    gpu_frame.upload(frame);
 #endif
 
-  if (current_model == 0) {
+  if (!use_dnn) {
     // Détection par Haar Cascade (CPU)
     cv::Mat processedBGRA;
     cv::cvtColor(frame, processedBGRA, cv::COLOR_BGR2BGRA);
     faceCascade_.detectMultiScale(processedBGRA, faces, 1.1, 3, 0,
                                   cv::Size(100, 100));
-  } else if (current_model == 1 && !faceNet_.empty()) {
+  } else {
     // Détection par DNN (CPU ou CUDA selon SAF_HAS_OPENCV_CUDA).
     // Wrap in try/catch: on a broken CUDA setup (version mismatch, OOM,
     // cuDNN assert) we don't want to take the whole app down.
@@ -293,7 +311,7 @@ bool Core::processFrame(cv::Mat &frame) {
                         profilesManager_.getTargetHeight()};
 
 #if defined(SAF_HAS_OPENCV_CUDA) && SAF_HAS_OPENCV_CUDA
-  if (current_model == 1) {
+  if (use_dnn) {
     gpu_cropped = gpu_frame(crop_region);
     cv::cuda::resize(gpu_cropped, gpu_resized, target);
     cv::cuda::cvtColor(gpu_resized, gpu_processed, cv::COLOR_BGR2BGRA);

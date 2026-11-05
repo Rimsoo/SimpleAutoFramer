@@ -63,6 +63,14 @@ endif()
 # ---------------------------------------------------------------------------
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio objdetect dnn)
 
+# OpenCV 5 relocated the classic Haar/LBP cv::CascadeClassifier from the core
+# "objdetect" module into the contrib "xobjdetect" module, so it must be linked
+# explicitly. On OpenCV 4 the symbol lives in objdetect and no extra module is
+# needed.
+if(OpenCV_VERSION_MAJOR GREATER_EQUAL 5)
+    find_package(OpenCV REQUIRED COMPONENTS xobjdetect)
+endif()
+
 # Core.cpp uses cv::cuda::resize / cv::cuda::cvtColor on the DNN path. Until
 # Core is refactored to guard those calls behind #ifdef USE_CUDA, we link
 # against the OpenCV CUDA modules whenever they are available.

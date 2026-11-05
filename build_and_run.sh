@@ -14,8 +14,13 @@ git submodule update --init --recursive
 # ("Found unsuitable version 13.2, required exactly 12.8") which breaks the
 # configure. /usr/lib/cmake/opencv4/ (opencv / opencv-cuda package) works.
 OPENCV_DIR_ARG=()
-if [ -z "${OpenCV_DIR:-}" ] && [ -f /usr/lib/cmake/opencv4/OpenCVConfig.cmake ]; then
-    OPENCV_DIR_ARG=(-DOpenCV_DIR=/usr/lib/cmake/opencv4)
+if [ -z "${OpenCV_DIR:-}" ]; then
+    for _candidate in /usr/lib/cmake/opencv5 /usr/lib/cmake/opencv4; do
+        if [ -f "$_candidate/OpenCVConfig.cmake" ]; then
+            OPENCV_DIR_ARG=(-DOpenCV_DIR="$_candidate")
+            break
+        fi
+    done
 fi
 
 mkdir -p "$BUILD_DIR"
