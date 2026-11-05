@@ -11,14 +11,32 @@ zooms around it smoothly, and feeds the result to a **virtual camera**
 
 ## Installation
 
-### Arch Linux
+### AppImage (any distribution)
+
+Download `SimpleAutoFramer-<version>-x86_64.AppImage` from the
+[releases](https://forgejo.aaaoz.fr/Rimso/SimpleAutoFramer/releases), then:
+
+```bash
+chmod +x SimpleAutoFramer-*-x86_64.AppImage
+./SimpleAutoFramer-*-x86_64.AppImage
+```
+
+It needs the `v4l2loopback` kernel module (see below) and runs YuNet on the
+CPU. On first launch it adds a launcher entry to
+`~/.local/share/applications` (also required for global shortcuts).
+
+### Arch Linux (AUR)
+
+```bash
+yay -S simpleautoframer-git
+```
+
+Or from this repository:
 
 ```bash
 cd packaging/arch
 makepkg -si
 ```
-
-(The same `PKGBUILD` is meant for the AUR as `simpleautoframer-git`.)
 
 ### Other distributions (Ubuntu/Debian, Fedora)
 
@@ -111,6 +129,13 @@ Builds run on Forgejo Actions (`.forgejo/workflows/build.yml`). Forgejo does
 not provide hosted machines, so a **runner must be registered**; without one
 the jobs wait forever with *"No matching online runner"*. See
 [docs/CI.md](docs/CI.md).
+
+To publish a release, push a version tag; the AppImage is built and attached
+to the release automatically:
+
+```bash
+git tag -a v0.3.1 -m "SimpleAutoFramer 0.3.1" && git push origin v0.3.1
+```
 
 ## TODO
 
