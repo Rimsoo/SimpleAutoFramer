@@ -1,5 +1,9 @@
 # SimpleAutoFramer C++
 
+> [!NOTE]
+> Main repository: [Forgejo](https://forgejo.aaaoz.fr/Rimso/SimpleAutoFramer) · Mirror: [GitHub](https://github.com/Rimsoo/SimpleAutoFramer) (kept in sync automatically).
+> Issues and feedback are welcome on GitHub.
+
 ## Installation
 
 ### Prerequisites
