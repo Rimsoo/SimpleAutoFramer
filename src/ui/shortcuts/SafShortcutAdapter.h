@@ -38,6 +38,8 @@ public:
   /// Returns the backend name that accepted the bindings, or empty string.
   std::string_view Commit() override;
 
+  void SetCompositorSync(bool enabled) override { compositorSync_ = enabled; }
+
   /// Debug helper.
   std::string_view backendName() const;
 
@@ -46,4 +48,5 @@ private:
   std::vector<saf::ShortcutDescriptor> pending_;
   std::atomic<int> nextId_{0};
   bool started_{false};
+  bool compositorSync_{true};
 };

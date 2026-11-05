@@ -115,8 +115,6 @@ void X11ShortcutManager::unregisterShortcut(const std::string& id) {
 bool X11ShortcutManager::start() {
     if (m_active.load()) return true;
 
-    XSetErrorHandler(errorHandler);
-
     m_display = XOpenDisplay(nullptr);
     if (!m_display) {
         std::cerr << "[x11] XOpenDisplay failed — no DISPLAY set?" << std::endl;
@@ -134,7 +132,11 @@ bool X11ShortcutManager::start() {
         }
     }
 
+    // XSetErrorHandler is process-wide: install ours only around the grabs
+    // (BadAccess when another app owns the key) and give GDK its own back.
+    auto previous = XSetErrorHandler(errorHandler);
     grabAll();
+    XSetErrorHandler(previous);
 
     m_stopRequested.store(false);
     m_active.store(true);
@@ -147,16 +149,13 @@ void X11ShortcutManager::stop() {
 
     m_stopRequested.store(true);
 
-    // Poke the display to wake up the event loop.
-    if (m_display) {
-        // XSendEvent to ourselves would be cleaner; for simplicity we just
-        // close: XNextEvent will return I/O error, the thread exits.
-    }
-
+    // The event loop polls every 10 ms and checks m_stopRequested.
     if (m_thread.joinable()) m_thread.join();
 
     if (m_display) {
+        auto previous = XSetErrorHandler(errorHandler);
         ungrabAll();
+        XSetErrorHandler(previous);
         XCloseDisplay(m_display);
         m_display = nullptr;
     }

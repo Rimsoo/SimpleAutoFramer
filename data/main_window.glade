@@ -81,6 +81,13 @@
       </object>
     </child>
     <child>
+      <object class="GtkCheckMenuItem" id="hyprland_sync_item">
+        <property name="visible">False</property>
+        <property name="label" translatable="yes">Sync shortcuts to Hyprland config</property>
+        <property name="tooltip-text" translatable="yes">Write the global-shortcut binds to ~/.config/hypr/ so Hyprland routes the keys to SimpleAutoFramer</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="doc_menu_item">
         <property name="visible">True</property>
         <property name="label" translatable="yes">Documentation</property>

@@ -2,43 +2,34 @@
 #include "LinuxCamera.h"
 #include <filesystem>
 #include <iostream>
-#include <sys/stat.h>
 
 LinuxCamera::LinuxCamera() : v4l2Output(nullptr) {}
 LinuxCamera::~LinuxCamera() { stop(); }
 
 namespace fs = std::filesystem;
 bool LinuxCamera::open(int index, int width, int height, int fps) {
+  stop();
+
   std::string outputFile = "/dev/video" + std::to_string(index);
   if (!fs::exists(outputFile)) {
-    auto msg = "Attention : " + std::string(outputFile) +
-               " n'existe pas. Vérifiez v4l2loopback.";
-    // if (ui_)
-    //   ui_->showMessage(IUi::WARNING, msg);
-
-    std::cerr << msg << std::endl;
-
+    std::cerr << "Attention : " << outputFile
+              << " n'existe pas. Vérifiez v4l2loopback." << std::endl;
     return false;
   }
 
-  stop();
-
+  // I420 (YU12) is the format every consumer understands: Chromium, Firefox,
+  // Zoom, Teams, OBS… BGR32 is rejected by most browsers.
   V4L2DeviceParameters paramOut(outputFile.c_str(),
-                                v4l2_fourcc('B', 'G', 'R', '4'), width, height,
-                                fps, IOTYPE_MMAP);
+                                v4l2_fourcc('Y', 'U', '1', '2'), width & ~1,
+                                height & ~1, fps, IOTYPE_MMAP);
   v4l2Output = V4l2Output::create(paramOut);
 
   if (!v4l2Output) {
-    auto msg = "Erreur : Impossible d'ouvrir la sortie " + outputFile;
-
-    // if (ui_)
-    //   ui_->showMessage(IUi::ERROR, msg);
-
-    std::cerr << msg << std::endl;
+    std::cerr << "Erreur : impossible d'ouvrir la sortie " << outputFile
+              << std::endl;
     return false;
   }
-
-  return v4l2Output != nullptr;
+  return true;
 }
 
 void LinuxCamera::stop() {
@@ -47,32 +38,25 @@ void LinuxCamera::stop() {
     delete v4l2Output;
     v4l2Output = nullptr;
   }
-  // if (physicalCamera.isOpened()) {
-  //   physicalCamera.release();
-  // }
 }
 
 bool LinuxCamera::write(const cv::Mat &frame) {
-  if (!v4l2Output)
+  if (!v4l2Output || frame.empty())
     return false;
 
-  size_t bufferSize = frame.total() * frame.elemSize();
-  char *buffer = reinterpret_cast<char *>(frame.data);
-  size_t nb = v4l2Output->write(buffer, bufferSize);
-
+  cv::cvtColor(frame, yuv_, cv::COLOR_BGR2YUV_I420);
+  const size_t bufferSize = yuv_.total() * yuv_.elemSize();
+  size_t nb =
+      v4l2Output->write(reinterpret_cast<char *>(yuv_.data), bufferSize);
   return nb == bufferSize;
 }
 
 bool LinuxCamera::isOpened() const { return v4l2Output != nullptr; }
 
 int LinuxCamera::getWidth() const {
-  if (v4l2Output)
-    return v4l2Output->getWidth();
-  return 0;
+  return v4l2Output ? v4l2Output->getWidth() : 0;
 }
 
 int LinuxCamera::getHeight() const {
-  if (v4l2Output)
-    return v4l2Output->getHeight();
-  return 0;
+  return v4l2Output ? v4l2Output->getHeight() : 0;
 }

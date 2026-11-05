@@ -22,4 +22,7 @@ public:
   /// Activate the batch registered since the last UnregisterAll().
   /// Returns the backend name actually used, or an empty string on failure.
   virtual std::string_view Commit() = 0;
+
+  /// Whether the backend may edit the compositor config (Hyprland binds).
+  virtual void SetCompositorSync(bool /*enabled*/) {}
 };

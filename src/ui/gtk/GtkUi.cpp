@@ -1,6 +1,6 @@
-
 // GtkUserInterface.cpp
 #include "GtkUi.h"
+#include "Paths.h"
 #include <gdk/gdk.h>
 #include <iostream>
 
@@ -12,12 +12,7 @@ namespace {
 // Non-fatal if the file isn't found — the UI just falls back to the
 // system theme with no custom accents.
 void loadAppCss() {
-#ifdef INSTALL_DATA_DIR
-  const std::string css_path =
-      std::string(INSTALL_DATA_DIR) + "/main_window.css";
-#else
-  const std::string css_path = fs::absolute("main_window.css").string();
-#endif
+  const std::string css_path = saf::resourcePath("main_window.css");
   if (!fs::exists(css_path)) {
     std::cerr << "[saf] CSS not found at " << css_path
               << " — skipping custom styling." << std::endl;
@@ -45,21 +40,32 @@ GtkUi::GtkUi(Core &core)
     : app_(Gtk::Application::create("org.simple_auto_framer")),
       mainWindow_(nullptr) {
 
+  // Single instance: if another SimpleAutoFramer is already running, ask it
+  // to show its window and leave before we grab the cameras a second time.
+  try {
+    app_->register_application();
+  } catch (const Glib::Error &e) {
+    std::cerr << "Avertissement : impossible d'enregistrer l'application : "
+              << e.what() << std::endl;
+  }
+  if (app_->is_registered() && app_->is_remote()) {
+    std::cerr << "[saf] SimpleAutoFramer tourne déjà : affichage de la fenêtre "
+                 "existante."
+              << std::endl;
+    app_->activate();
+    std::exit(0);
+  }
+
   loadAppCss();
 
   // Chargement de l'interface via Glade
   auto refBuilder = Gtk::Builder::create();
+  const std::string glade_path = saf::resourcePath("main_window.glade");
   try {
-#ifdef INSTALL_DATA_DIR
-    std::string glade_path =
-        std::string(INSTALL_DATA_DIR) + "/main_window.glade";
-#else
-    std::string glade_path = fs::absolute("main_window.glade").string();
-#endif
     refBuilder->add_from_file(glade_path);
   } catch (const Glib::Error &ex) {
-    std::cerr << "Erreur lors du chargement de l'interface : " << ex.what()
-              << std::endl;
+    std::cerr << "Erreur lors du chargement de l'interface (" << glade_path
+              << ") : " << ex.what() << std::endl;
     return;
   }
 
@@ -75,21 +81,17 @@ GtkUi::GtkUi(Core &core)
       [&core]() { core.openCaptureCamera(); });
   mainWindow_->signalVirtualCameraChanged.connect(
       [&core]() { core.openVirtualCamera(); });
+  // Profiles can point at different devices / output sizes.
+  mainWindow_->signalProfileChanged.connect(
+      [&core]() { core.reloadDevicesIfNeeded(); });
 
-  // register_application throws Gio::DBus::Error if the well-known name is
-  // already taken (quick restarts, stuck previous process, …). Treat it as
-  // non-fatal — the app can still function, it just won't receive remote
-  // GApplication signals.
-  try {
-    app_->register_application();
-  } catch (const Glib::Error &e) {
-    std::cerr << "Avertissement : impossible d'enregistrer l'application "
-                 "(peut-être une autre instance ?) : "
-              << e.what() << std::endl;
-  } catch (const std::exception &e) {
-    std::cerr << "Avertissement : register_application : " << e.what()
-              << std::endl;
-  }
+  // Relaunching the app (or clicking its launcher) re-shows the window, which
+  // is the only way back when no tray is available (GNOME without the
+  // AppIndicator extension, bare Hyprland…).
+  app_->signal_activate().connect([this]() {
+    if (mainWindow_)
+      mainWindow_->present();
+  });
 
   core.setUi(this);
 }
@@ -103,8 +105,7 @@ void GtkUi::showMessage(MessageType type, const std::string &message) {
                                                   : Gtk::MESSAGE_ERROR;
     mainWindow_->showMessage(gtkType, message);
   } else {
-    std::cerr << "/!\\ GTK UI NOT INITALIZED /!\\" << std::endl
-              << "Message (" << type << "): " << message << std::endl;
+    std::cerr << "Message (" << type << "): " << message << std::endl;
   }
 }
 
@@ -120,7 +121,7 @@ int GtkUi::run() {
     return 1;
   }
 
-  // Lancer la boucle principale GTK
+  // Keep running when the window is hidden to the tray.
   app_->hold();
   return app_->run(*mainWindow_);
 }

@@ -1,4 +1,5 @@
 #include "ProfileManager.h"
+#include "Paths.h"
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
@@ -10,34 +11,41 @@
 namespace fs = std::filesystem;
 
 ProfileManager::ProfileManager() {
-
 #ifdef INSTALL_DATA_DIR
-  // Récupérer le répertoire home de l'utilisateur
-  const char *home_dir = getenv("HOME");
-  if (!home_dir) {
-    std::cerr << "Error: Cannot find HOME directory." << std::endl;
-    return;
-  }
-
-  // Construire le chemin de configuration
-  fs::path config_dir = fs::path(home_dir) / ".config" / "simpleautoframer";
-  if (!fs::exists(config_dir)) {
-    fs::create_directories(config_dir);
-    std::cout << "Création du répertoire de configuration : " << config_dir
-              << std::endl;
-  }
-
-  profileFilename = (config_dir / "simpleautoframer.config.json").string();
+  profileFilename =
+      (saf::userConfigDir() / "simpleautoframer.config.json").string();
 #else
-  profileFilename = fs::absolute("simpleautoframer.config.json").string();
+  // Dev builds keep their config next to the binary so they don't clobber
+  // the installed app's settings.
+  fs::path dir = saf::executableDir();
+  if (dir.empty())
+    dir = fs::current_path();
+  profileFilename = (dir / "simpleautoframer.config.json").string();
 #endif
 
   loadProfilesFile();
 }
 
 void ProfileManager::setShowQuitMessage(bool value) {
+  std::lock_guard<std::mutex> lock(mutex_);
   showQuitMessage = value;
   internalSave();
+}
+
+bool ProfileManager::isShowQuitMessage() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return showQuitMessage;
+}
+
+void ProfileManager::setHyprlandSync(bool value) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  hyprlandSync = value;
+  internalSave();
+}
+
+bool ProfileManager::isHyprlandSync() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return hyprlandSync;
 }
 
 // Conversion Profile <-> JSON
@@ -54,10 +62,10 @@ nlohmann::json ProfileManager::Profile::toJson() const {
           {"shortcut", shortcut}};
 }
 
-ProfileManager::Profile *
+std::unique_ptr<ProfileManager::Profile>
 ProfileManager::Profile::fromJson(const std::string &name,
                                   const nlohmann::json &j) {
-  Profile *cfg = new Profile();
+  auto cfg = std::make_unique<Profile>();
   cfg->name = name;
   cfg->camera_selection = j.value("camera_selection", cfg->camera_selection);
   cfg->smoothing_factor = j.value("smoothing_factor", cfg->smoothing_factor);
@@ -71,7 +79,21 @@ ProfileManager::Profile::fromJson(const std::string &name,
   cfg->virtual_camera_selection =
       j.value("virtual_camera_selection", cfg->virtual_camera_selection);
   cfg->shortcut = j.value("shortcut", cfg->shortcut);
+  cfg->sanitize();
   return cfg;
+}
+
+void ProfileManager::Profile::sanitize() {
+  camera_selection = std::max(camera_selection, 0);
+  virtual_camera_selection = std::max(virtual_camera_selection, 0);
+  smoothing_factor = std::clamp(smoothing_factor, 0.0, 1.0);
+  detection_confidence = std::clamp(detection_confidence, 0.0, 1.0);
+  model_selection = std::clamp(model_selection, 0, 1);
+  zoom_base = std::clamp(zoom_base, 1.0, 5.0);
+  zoom_multiplier = std::clamp(zoom_multiplier, 0.0, 10.0);
+  // The virtual camera is fed I420 frames, which need even dimensions.
+  target_width = std::clamp(target_width, 160, 7680) & ~1;
+  target_height = std::clamp(target_height, 120, 4320) & ~1;
 }
 
 std::vector<ProfileManager::Profile> ProfileManager::getProfileList() const {
@@ -83,13 +105,23 @@ std::vector<ProfileManager::Profile> ProfileManager::getProfileList() const {
   return profiles;
 }
 
-// Gestion des profileurations
+std::string ProfileManager::getCurrentProfileName() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return currentProfile->name;
+}
+
+bool ProfileManager::profileExists(const std::string &name) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return findProfile(name) != savedProfiles.end();
+}
+
+// Gestion des profils
 void ProfileManager::createProfile(const std::string &name) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   auto conf = findProfile(name);
   if (conf != savedProfiles.end()) {
-    currentProfile = *conf;
+    currentProfile = conf->get();
     return;
   }
 
@@ -97,39 +129,41 @@ void ProfileManager::createProfile(const std::string &name) {
 }
 
 void ProfileManager::create(const std::string &name = "default") {
-  Profile *newProfile =
-      currentProfile != nullptr ? new Profile(*currentProfile) : new Profile();
+  auto newProfile = currentProfile != nullptr
+                        ? std::make_unique<Profile>(*currentProfile)
+                        : std::make_unique<Profile>();
   newProfile->name = name;
-  currentProfile = newProfile;
-  savedProfiles.push_back(newProfile);
+  // A copied shortcut would make two profiles fight over the same keys.
+  newProfile->shortcut.clear();
+  currentProfile = newProfile.get();
+  savedProfiles.push_back(std::move(newProfile));
   internalSave();
 }
 
 void ProfileManager::deleteProfile(const std::string &name) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = findProfile(name);
-  bool isCurrent = false;
-  if (it != savedProfiles.end()) {
-    if (*it == currentProfile) {
-      isCurrent = true;
-    }
-    savedProfiles.erase(it);
+  if (it == savedProfiles.end())
+    return;
 
-    if (savedProfiles.size() > 0) {
-      currentProfile = savedProfiles[0];
-      internalSave();
-    } else {
-      currentProfile = nullptr;
-      create();
-    }
+  const bool wasCurrent = it->get() == currentProfile;
+  savedProfiles.erase(it);
+
+  if (savedProfiles.empty()) {
+    currentProfile = nullptr;
+    create();
+    return;
   }
+  if (wasCurrent)
+    currentProfile = savedProfiles.front().get();
+  internalSave();
 }
 
 void ProfileManager::switchProfile(const std::string &name) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = findProfile(name);
   if (it != savedProfiles.end()) {
-    currentProfile = *it;
+    currentProfile = it->get();
     internalSave();
   }
 }
@@ -138,6 +172,7 @@ void ProfileManager::switchProfile(const std::string &name) {
 void ProfileManager::loadProfilesFile() {
   std::lock_guard<std::mutex> lock(mutex_);
   savedProfiles.clear();
+  currentProfile = nullptr;
 
   if (!std::filesystem::exists(profileFilename)) {
     create();
@@ -165,20 +200,25 @@ void ProfileManager::loadProfilesFile() {
   try {
     if (j.contains("profiles") && j["profiles"].is_object()) {
       for (const auto &[key, value] : j["profiles"].items()) {
-        savedProfiles.push_back(Profile::fromJson(key, value));
+        if (value.is_object())
+          savedProfiles.push_back(Profile::fromJson(key, value));
       }
     }
+    showQuitMessage = j.value("show_quit_message", true);
+    hyprlandSync = j.value("hyprland_sync", true);
   } catch (const nlohmann::json::exception &ex) {
     std::cerr << "Avertissement : certains profils n'ont pu être chargés : "
               << ex.what() << std::endl;
   }
 
-  showQuitMessage = j.value("show_quit_message", true);
-
-  std::string lastUsed = j.value("last_used", "default");
+  std::string lastUsed = "default";
+  if (j.contains("last_used") && j["last_used"].is_string())
+    lastUsed = j["last_used"].get<std::string>();
   auto it = findProfile(lastUsed);
   if (it != savedProfiles.end()) {
-    currentProfile = *it;
+    currentProfile = it->get();
+  } else if (!savedProfiles.empty()) {
+    currentProfile = savedProfiles.front().get();
   } else {
     create();
   }
@@ -196,13 +236,14 @@ void ProfileManager::internalSave() {
 
   nlohmann::json j;
   j["show_quit_message"] = showQuitMessage;
+  j["hyprland_sync"] = hyprlandSync;
   j["last_used"] = currentProfile->name;
 
   for (const auto &profile : savedProfiles) {
     j["profiles"][profile->name] = profile->toJson();
   }
 
-  // Atomic write: dump to a sibling .tmp file, fsync, then rename().
+  // Atomic write: dump to a sibling .tmp file then rename().
   // Protects the config from partial writes on crash / power loss.
   const std::string tmp = profileFilename + ".tmp";
   try {
@@ -236,110 +277,48 @@ void ProfileManager::internalSave() {
   }
 }
 
-std::vector<ProfileManager::Profile *>::iterator
+std::vector<std::unique_ptr<ProfileManager::Profile>>::iterator
 ProfileManager::findProfile(const std::string &name) {
-  return std::find_if(savedProfiles.begin(), savedProfiles.end(),
-                      [&name](const Profile *c) { return c->name == name; });
+  return std::find_if(
+      savedProfiles.begin(), savedProfiles.end(),
+      [&name](const std::unique_ptr<Profile> &c) { return c->name == name; });
 }
 
 // Getters avec verrouillage -------------------------------
-int ProfileManager::getCameraSelection() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->camera_selection;
-}
+#define SAF_GETTER(type, fn, field)                                            \
+  type ProfileManager::fn() const {                                            \
+    std::lock_guard<std::mutex> lock(mutex_);                                  \
+    return currentProfile->field;                                              \
+  }
 
-double ProfileManager::getSmoothingFactor() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->smoothing_factor;
-}
-
-double ProfileManager::getDetectionConfidence() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->detection_confidence;
-}
-
-int ProfileManager::getModelSelection() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->model_selection;
-}
-
-double ProfileManager::getZoomBase() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->zoom_base;
-}
-
-double ProfileManager::getZoomMultiplier() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->zoom_multiplier;
-}
-
-int ProfileManager::getTargetWidth() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->target_width;
-}
-
-int ProfileManager::getTargetHeight() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->target_height;
-}
-
-int ProfileManager::getVirtualCameraSelection() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->virtual_camera_selection;
-}
-
-std::string ProfileManager::getShortcut() const {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return currentProfile->shortcut;
-}
+SAF_GETTER(int, getCameraSelection, camera_selection)
+SAF_GETTER(double, getSmoothingFactor, smoothing_factor)
+SAF_GETTER(double, getDetectionConfidence, detection_confidence)
+SAF_GETTER(int, getModelSelection, model_selection)
+SAF_GETTER(double, getZoomBase, zoom_base)
+SAF_GETTER(double, getZoomMultiplier, zoom_multiplier)
+SAF_GETTER(int, getTargetWidth, target_width)
+SAF_GETTER(int, getTargetHeight, target_height)
+SAF_GETTER(int, getVirtualCameraSelection, virtual_camera_selection)
+SAF_GETTER(std::string, getShortcut, shortcut)
+#undef SAF_GETTER
 
 // Setters avec verrouillage -------------------------------
-void ProfileManager::setShortcut(const std::string &value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->shortcut = value;
-}
+#define SAF_SETTER(type, fn, field)                                            \
+  void ProfileManager::fn(type value) {                                        \
+    std::lock_guard<std::mutex> lock(mutex_);                                  \
+    currentProfile->field = value;                                             \
+    currentProfile->sanitize();                                                \
+  }
 
-void ProfileManager::setCameraSelection(int value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->camera_selection = value;
-}
-
-void ProfileManager::setSmoothingFactor(double value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->smoothing_factor = value;
-}
-
-void ProfileManager::setDetectionConfidence(double value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->detection_confidence = value;
-}
-
-void ProfileManager::setModelSelection(int value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->model_selection = value;
-}
-
-void ProfileManager::setZoomBase(double value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->zoom_base = value;
-}
-
-void ProfileManager::setZoomMultiplier(double value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->zoom_multiplier = value;
-}
-
-void ProfileManager::setTargetWidth(int value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->target_width = value;
-}
-
-void ProfileManager::setTargetHeight(int value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->target_height = value;
-}
-
-void ProfileManager::setVirtualCameraSelection(int value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  currentProfile->virtual_camera_selection = value;
-}
+SAF_SETTER(int, setCameraSelection, camera_selection)
+SAF_SETTER(double, setSmoothingFactor, smoothing_factor)
+SAF_SETTER(double, setDetectionConfidence, detection_confidence)
+SAF_SETTER(int, setModelSelection, model_selection)
+SAF_SETTER(double, setZoomBase, zoom_base)
+SAF_SETTER(double, setZoomMultiplier, zoom_multiplier)
+SAF_SETTER(int, setTargetWidth, target_width)
+SAF_SETTER(int, setTargetHeight, target_height)
+SAF_SETTER(int, setVirtualCameraSelection, virtual_camera_selection)
+SAF_SETTER(const std::string &, setShortcut, shortcut)
+#undef SAF_SETTER

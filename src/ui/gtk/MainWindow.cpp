@@ -1,5 +1,12 @@
 #include "MainWindow.h"
 #include "UiFactory.h"
+#include "HyprlandBindsSync.h"
+#include "Paths.h"
+#include <algorithm>
+#include <fcntl.h>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include <filesystem>
 #include <gdk/gdkkeysyms.h>
 #include <glibmm/markup.h>
@@ -31,6 +38,7 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   builder->get_widget("doc_menu_item", m_doc_menu_item);
   builder->get_widget("shortcut_entry", m_shortcut_entry);
   builder->get_widget("status_label", m_status_label);
+  builder->get_widget("hyprland_sync_item", m_hyprland_sync_item);
 
   // Vérifier que tous les widgets ont été correctement chargés
   if (!m_video_image || !m_video_container || !m_apply_button ||
@@ -38,7 +46,8 @@ MainWindow::MainWindow(BaseObjectType *cobject,
       !m_confidence_scale || !m_width_spin || !m_height_spin ||
       !m_model_selection_combo || !m_camera_selection_combo ||
       !m_virtual_camera_selection_combo || !m_profile_box || !m_new_profile ||
-      !m_delete_profile || !m_about_menu_item || !m_doc_menu_item) {
+      !m_delete_profile || !m_about_menu_item || !m_doc_menu_item ||
+      !m_shortcut_entry) {
     std::cerr << "Erreur : certains widgets n'ont pas été trouvés dans le "
                  "fichier Glade."
               << std::endl;
@@ -80,15 +89,44 @@ MainWindow::MainWindow(BaseObjectType *cobject,
   m_apply_button->signal_clicked().connect(
       sigc::mem_fun(*this, &MainWindow::onApplyClicked));
   m_about_menu_item->signal_activate().connect([this]() {
-    showMessage(Gtk::MESSAGE_INFO,
-                "Simple AutoFramer\nVersion 1.0\n\nAuteur : @Rimsoo");
+    showMessage(Gtk::MESSAGE_INFO, std::string("Simple AutoFramer\nVersion ") +
+                                       SAF_VERSION + "\n\nAuteur : @Rimsoo");
   });
   m_doc_menu_item->signal_activate().connect([this]() {
-    // Ouvrir la documentation dans le navigateur par défaut sur readme.md
-    std::system(
-        "xdg-open "
-        "https://github.com/Rimsoo/SimpleAutoFramer/blob/main/README.md");
+    // Non-blocking, unlike std::system("xdg-open …").
+    GError *err = nullptr;
+    if (!gtk_show_uri_on_window(
+            gobj(),
+            "https://forgejo.aaaoz.fr/Rimso/SimpleAutoFramer/src/branch/main/"
+            "README.md",
+            GDK_CURRENT_TIME, &err)) {
+      std::cerr << "[saf] Impossible d'ouvrir la documentation : "
+                << (err ? err->message : "?") << std::endl;
+      if (err)
+        g_error_free(err);
+    }
   });
+
+  // Profile combo: connected once (it used to be reconnected on every
+  // refresh, stacking up handlers).
+  m_profile_box->signal_changed().connect([this]() {
+    if (m_suppress_live_updates || !profilesManager)
+      return;
+    auto active_iter = m_profile_box->get_active();
+    if (active_iter)
+      switchToProfile(Glib::ustring(active_iter->get_value(m_columns.name)));
+  });
+
+  // Hyprland bind sync is only meaningful under Hyprland.
+  if (m_hyprland_sync_item) {
+    m_hyprland_sync_item->set_visible(saf::isHyprlandSession());
+    m_hyprland_sync_item->signal_toggled().connect([this]() {
+      if (m_suppress_live_updates || !profilesManager)
+        return;
+      profilesManager->setHyprlandSync(m_hyprland_sync_item->get_active());
+      setupShortcuts();
+    });
+  }
   // Live slider preview: updating the in-memory profile is enough, Core
   // reads these values on every frame. We keep the save-on-Apply behaviour.
   auto liveSliderHandler = [this](Gtk::Scale *scale,
@@ -148,9 +186,16 @@ void MainWindow::deleteProfileDialog(const std::string &profile_name) {
   if (result == Gtk::RESPONSE_NO)
     return;
 
+  bool hadShortcut = false;
+  for (const auto &p : profilesManager->getProfileList())
+    if (p.name == profile_name)
+      hadShortcut = !p.shortcut.empty();
+
   profilesManager->deleteProfile(profile_name);
   profilesSetup();
   signalProfileChanged.emit();
+  if (hadShortcut)
+    signalShortcutChanged.emit();
 }
 
 void MainWindow::popupNewProfileDialog() {
@@ -187,8 +232,22 @@ void MainWindow::popupNewProfileDialog() {
   signalProfileChanged.emit();
 }
 
+void MainWindow::switchToProfile(const std::string &name) {
+  if (name.empty() || name == profilesManager->getCurrentProfileName())
+    return;
+  profilesManager->switchProfile(name);
+  profilesSetup();
+  signalProfileChanged.emit();
+}
+
 void MainWindow::setProfileManager(ProfileManager *profileManager) {
   this->profilesManager = profileManager;
+
+  if (m_hyprland_sync_item) {
+    m_suppress_live_updates = true;
+    m_hyprland_sync_item->set_active(profilesManager->isHyprlandSync());
+    m_suppress_live_updates = false;
+  }
 
   setupAppIndicator();
   signalProfileChanged.connect([this]() { setupAppIndicator(); });
@@ -216,9 +275,9 @@ void MainWindow::profilesSetup() {
   setupAdjustments();
   setupModelSelection();
   setupCameraSelection(m_camera_selection_combo,
-                       profilesManager->getCameraSelection());
+                       profilesManager->getCameraSelection(), false);
   setupCameraSelection(m_virtual_camera_selection_combo,
-                       profilesManager->getVirtualCameraSelection());
+                       profilesManager->getVirtualCameraSelection(), true);
 
   m_width_spin->set_value(profilesManager->getTargetWidth());
   m_height_spin->set_value(profilesManager->getTargetHeight());
@@ -274,17 +333,6 @@ void MainWindow::setupProfileBox() {
   if (active_iter) {
     m_profile_box->set_active(active_iter);
   }
-
-  m_profile_box->signal_changed().connect([this]() {
-    auto active_iter = m_profile_box->get_active();
-    if (active_iter && profilesManager->getCurrentProfileName() !=
-                           active_iter->get_value(m_columns.name)) {
-      auto name = active_iter->get_value(m_columns.name);
-      profilesManager->switchProfile(name);
-      profilesSetup();
-      signalProfileChanged.emit();
-    }
-  });
 }
 
 void MainWindow::setupAdjustments() {
@@ -325,40 +373,73 @@ void MainWindow::setupModelSelection() {
 }
 
 void MainWindow::setupCameraSelection(Gtk::ComboBoxText *combo,
-                                      int current_selection) {
+                                      int current_selection,
+                                      bool wantLoopback) {
   Glib::RefPtr<Gtk::ListStore> store = Gtk::ListStore::create(m_columns);
-
   combo->set_model(store);
 
-  Gtk::TreeModel::Row active_iter;
-  auto devices = listVideoDevices();
-  for (const auto &device : devices) {
-    // Extraire l'ID numérique du périphérique, par exemple "/dev/video3" -> 3
-    int id = std::stoi(device.substr(std::string("/dev/video").length()));
+  bool currentListed = false;
+  for (const auto &dev : listVideoDevices()) {
+    // Physical cameras for the input, loopback devices for the output; the
+    // current selection is always listed so the combo has a valid entry.
+    const bool wanted = wantLoopback ? dev.loopback
+                                     : (dev.capture && !dev.loopback);
+    if (!wanted && dev.index != current_selection)
+      continue;
     Gtk::TreeModel::Row row = *store->append();
-    row[m_columns.name] = device;
-    row[m_columns.id] = id;
-
-    if (id == current_selection) {
+    row[m_columns.name] = dev.label;
+    row[m_columns.id] = dev.index;
+    if (dev.index == current_selection) {
       combo->set_active(row);
+      currentListed = true;
     }
+  }
+
+  if (!currentListed) {
+    Gtk::TreeModel::Row row = *store->append();
+    row[m_columns.name] =
+        "/dev/video" + std::to_string(current_selection) + " (absent)";
+    row[m_columns.id] = current_selection;
+    combo->set_active(row);
   }
 }
 
-std::vector<std::string> MainWindow::listVideoDevices() {
-  std::vector<std::string> devices;
-  for (const auto &entry : std::filesystem::directory_iterator("/dev")) {
-    std::string filename = entry.path().filename().string();
-    // Vérifier que le nom commence par "video" et qu'il est de la forme
-    // "videoX"
-    if (filename.rfind("video", 0) == 0) {
-      devices.push_back(entry.path().string());
+std::vector<MainWindow::VideoDevice> MainWindow::listVideoDevices() {
+  std::vector<VideoDevice> devices;
+  std::error_code ec;
+  for (const auto &entry : fs::directory_iterator("/dev", ec)) {
+    const std::string filename = entry.path().filename().string();
+    // Only "videoN" nodes.
+    if (filename.rfind("video", 0) != 0 || filename.size() == 5 ||
+        !std::all_of(filename.begin() + 5, filename.end(), ::isdigit))
+      continue;
+
+    VideoDevice dev{std::stoi(filename.substr(5)), entry.path().string(),
+                    false, true};
+    const int fd = ::open(entry.path().c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd >= 0) {
+      v4l2_capability cap{};
+      if (::ioctl(fd, VIDIOC_QUERYCAP, &cap) == 0) {
+        const __u32 caps = (cap.capabilities & V4L2_CAP_DEVICE_CAPS)
+                               ? cap.device_caps
+                               : cap.capabilities;
+        dev.loopback = std::string(reinterpret_cast<char *>(cap.driver)) ==
+                       "v4l2 loopback";
+        dev.capture = caps & V4L2_CAP_VIDEO_CAPTURE;
+        dev.label += " — " + std::string(reinterpret_cast<char *>(cap.card));
+      }
+      ::close(fd);
     }
+    devices.push_back(std::move(dev));
   }
+  std::sort(devices.begin(), devices.end(),
+            [](const VideoDevice &a, const VideoDevice &b) {
+              return a.index < b.index;
+            });
   return devices;
 }
 
-bool MainWindow::on_delete_event(GdkEventAny *anyEvent) {
+bool MainWindow::on_delete_event(GdkEventAny * /*anyEvent*/) {
   if (profilesManager->isShowQuitMessage()) {
     std::string msg = "Simple AutoFramer will now run in the background.\n\nTo "
                       "quit, right-click the tray icon and select 'Quit'.";
@@ -492,8 +573,11 @@ void MainWindow::onApplyClicked() {
   profilesManager->setDetectionConfidence(m_confidence_scale->get_value());
   profilesManager->setZoomMultiplier(m_zoom_multiplier_scale->get_value());
 
-  auto vcam_id =
-      (*m_virtual_camera_selection_combo->get_active())[m_columns.id];
+  auto vcam_iter = m_virtual_camera_selection_combo->get_active();
+  auto camera_iter = m_camera_selection_combo->get_active();
+  auto model_iter = m_model_selection_combo->get_active();
+  const int vcam_id = vcam_iter ? (*vcam_iter)[m_columns.id]
+                                : profilesManager->getVirtualCameraSelection();
   bool reload_virtual_camera =
       profilesManager->getTargetWidth() !=
           static_cast<int>(m_width_spin->get_value()) ||
@@ -506,12 +590,13 @@ void MainWindow::onApplyClicked() {
       static_cast<int>(m_height_spin->get_value()));
   profilesManager->setVirtualCameraSelection(vcam_id);
 
-  auto camera_id = (*m_camera_selection_combo->get_active())[m_columns.id];
+  const int camera_id = camera_iter ? (*camera_iter)[m_columns.id]
+                                    : profilesManager->getCameraSelection();
   bool reload_camera = profilesManager->getCameraSelection() != camera_id;
   profilesManager->setCameraSelection(camera_id);
 
-  profilesManager->setModelSelection(
-      (*m_model_selection_combo->get_active())[m_columns.id]);
+  if (model_iter)
+    profilesManager->setModelSelection((*model_iter)[m_columns.id]);
   bool shortcut_changed =
       profilesManager->getShortcut() != m_shortcut_entry->get_text();
   profilesManager->setShortcut(m_shortcut_entry->get_text());
@@ -541,16 +626,11 @@ void MainWindow::setupAppIndicator() {
   static AppIndicator *indicator = nullptr;
   static GtkWidget *menu = nullptr;
 
-#ifdef INSTALL_DATA_DIR
-  std::string icon_path =
-      std::string(INSTALL_DATA_DIR) + "/simpleautoframer.png";
-#else
-  std::string icon_path = fs::absolute("simpleautoframer.png").string();
-#endif
-
+  std::string icon_path = saf::resourcePath("simpleautoframer.png");
   if (!fs::exists(icon_path)) {
-    showMessage(Gtk::MESSAGE_ERROR, "Erreur : Fichier icône non trouvé.");
-    return;
+    std::cerr << "[saf] Icône introuvable (" << icon_path
+              << "), utilisation de l'icône système." << std::endl;
+    icon_path = "camera-web";
   }
 
   if (!indicator) {
@@ -591,10 +671,22 @@ void MainWindow::setupAppIndicator() {
           ProfileManager *manager = win->getProfileManager();
           const char *profileName = static_cast<const char *>(
               g_object_get_data(G_OBJECT(item), "profile-name"));
-          if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item))) {
-            manager->switchProfile(profileName);
-            win->profilesSetup();
-          }
+          if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item)) ||
+              !profileName || manager->getCurrentProfileName() == profileName)
+            return;
+          // Defer: switching rebuilds this very menu (setupAppIndicator),
+          // which must not happen while the item is being activated.
+          struct Switch {
+            MainWindow *win;
+            std::string name;
+          };
+          g_idle_add(
+              +[](gpointer d) -> gboolean {
+                std::unique_ptr<Switch> sw(static_cast<Switch *>(d));
+                sw->win->switchToProfile(sw->name);
+                return G_SOURCE_REMOVE;
+              },
+              new Switch{win, profileName});
         }),
         this);
 
@@ -616,9 +708,10 @@ void MainWindow::setupAppIndicator() {
   GtkWidget *menu_item_quit = gtk_menu_item_new_with_label("Quit");
   g_signal_connect(menu_item_quit, "activate",
                    G_CALLBACK(+[](GtkMenuItem *, gpointer) {
-                     //   close_all();
-                     gtk_main_quit();
-                     exit(0);
+                     // Core::start() returns once the app quits, then stops
+                     // the capture thread and releases the cameras.
+                     if (GApplication *app = g_application_get_default())
+                       g_application_quit(app);
                    }),
                    nullptr);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item_quit);
@@ -774,6 +867,8 @@ void MainWindow::setupShortcuts() {
       signalProfileChanged.emit();
     });
   }
+
+  hotkeys->SetCompositorSync(profilesManager->isHyprlandSync());
 
   // Activate the batch. On Wayland/portal this triggers the user-visible
   // consent prompt; on X11 it calls XGrabKey.

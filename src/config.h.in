@@ -1,8 +1,10 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define SAF_VERSION "@PROJECT_VERSION@"
+
 #ifdef INSTALL_MODE
-    #define INSTALL_DATA_DIR "/usr/share/simpleautoframer"
+    #define INSTALL_DATA_DIR "@SAF_INSTALL_DATA_DIR@"
 #endif
 
 #endif // CONFIG_H

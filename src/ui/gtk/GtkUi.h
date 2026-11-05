@@ -16,6 +16,6 @@ public:
   int run() override;
 
 private:
-  MainWindow *mainWindow_;
   Glib::RefPtr<Gtk::Application> app_;
+  MainWindow *mainWindow_;
 };

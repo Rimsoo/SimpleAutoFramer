@@ -113,10 +113,14 @@ std::string_view SafShortcutAdapter::Commit() {
     mgr_->registerShortcut(d);
   }
 
+  const bool portal = mgr_->backendName() == "xdg-desktop-portal";
   if (pending_.empty()) {
     // Nothing to bind; keep the manager dormant but consider it "committed"
     // so we don't hit the portal unnecessarily.
     started_ = true;
+    if (portal && saf::isHyprlandSession())
+      compositorSync_ ? saf::syncHyprlandBinds(pending_)
+                      : saf::removeHyprlandBinds();
     return mgr_->backendName();
   }
 
@@ -134,13 +138,15 @@ std::string_view SafShortcutAdapter::Commit() {
             << " submitted to backend " << mgr_->backendName() << "."
             << std::endl;
 
-  // Convenience for Hyprland users: rewrite the managed block in
-  // hyprland.conf so the `bind = ..., global, :<id>` lines match the
-  // current shortcut set, then reload. Without this, Hyprland wouldn't
-  // route physical keys to the portal until the user edits the config by
-  // hand. No-op on other compositors (KDE / GNOME wire bindings themselves).
-  if (mgr_->backendName() == "xdg-desktop-portal") {
-    syncHyprlandBinds(pending_);
+  // Convenience for Hyprland users: write the `global` binds so the
+  // compositor routes the keys to the portal, then reload. KDE / GNOME wire
+  // bindings themselves.
+  // Users who manage their binds by hand can turn this off from the menu.
+  if (portal && saf::isHyprlandSession()) {
+    if (compositorSync_)
+      saf::syncHyprlandBinds(pending_);
+    else
+      saf::removeHyprlandBinds();
   }
 
   return mgr_->backendName();

@@ -10,6 +10,7 @@ public:
                     int fps) = 0; // Pour caméra physique
   // virtual bool open(const std::string &output) = 0; // Pour caméra virtuelle
   virtual void stop() = 0;
+  // `frame` is a BGR image of getWidth() x getHeight().
   virtual bool write(const cv::Mat &frame) = 0;
   virtual int getWidth() const = 0;
   virtual int getHeight() const = 0;

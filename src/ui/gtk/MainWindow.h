@@ -18,10 +18,8 @@
 #include <gtkmm/application.h>
 #include <libayatana-appindicator/app-indicator.h>
 #include <mutex>
-#include <opencv2/dnn.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
-#include <sys/stat.h>
 #include <vector>
 
 class MainWindow : public Gtk::Window {
@@ -90,6 +88,7 @@ protected:
   Gtk::MenuItem *m_delete_profile{nullptr};
   Gtk::MenuItem *m_about_menu_item{nullptr};
   Gtk::MenuItem *m_doc_menu_item{nullptr};
+  Gtk::CheckMenuItem *m_hyprland_sync_item{nullptr};
 
   // Live-preview plumbing for the 4 slider controls: the handlers write
   // directly into the ProfileManager (so Core picks up the change on the
@@ -108,9 +107,17 @@ protected:
   void setupAdjustments();
   void setupProfileBox();
   void setupModelSelection();
-  void setupCameraSelection(Gtk::ComboBoxText *combo, int currentSelection);
+  void setupCameraSelection(Gtk::ComboBoxText *combo, int currentSelection,
+                            bool wantLoopback);
 
-  std::vector<std::string> listVideoDevices();
+  struct VideoDevice {
+    int index;
+    std::string label;
+    bool loopback; // v4l2loopback node (a virtual camera)
+    bool capture;  // can deliver frames (excludes metadata nodes)
+  };
+  std::vector<VideoDevice> listVideoDevices();
+  void switchToProfile(const std::string &name);
 
   void setupShortcuts();
   void setupAppIndicator();

@@ -151,6 +151,10 @@ bool PortalShortcutManager::start() {
 
   m_stopRequested.store(false);
   m_active.store(false);
+  // Created here (not on the worker) so stop() can always reach the loop,
+  // even if it runs before the worker thread got scheduled.
+  m_ctx = g_main_context_new();
+  m_loop = g_main_loop_new(m_ctx, FALSE);
   m_thread = std::thread(&PortalShortcutManager::workerMain, this);
   return true;
 }
@@ -163,10 +167,24 @@ void PortalShortcutManager::stop() {
 
   // Quit the worker's main loop from the caller thread. g_main_loop_quit
   // is thread-safe w.r.t. g_main_loop_run.
-  if (m_loop)
-    g_main_loop_quit(m_loop);
+  // Quitting before the worker reached g_main_loop_run() would be lost, so
+  // post the quit as a source on the worker's context instead.
+  GSource *src = g_idle_source_new();
+  g_source_set_callback(
+      src,
+      +[](gpointer loop) -> gboolean {
+        g_main_loop_quit(static_cast<GMainLoop *>(loop));
+        return G_SOURCE_REMOVE;
+      },
+      m_loop, nullptr);
+  g_source_attach(src, m_ctx);
+  g_source_unref(src);
 
   m_thread.join();
+  g_main_loop_unref(m_loop);
+  m_loop = nullptr;
+  g_main_context_unref(m_ctx);
+  m_ctx = nullptr;
   m_active.store(false);
 }
 
@@ -175,9 +193,7 @@ void PortalShortcutManager::stop() {
 // ============================================================================
 
 void PortalShortcutManager::workerMain() {
-  m_ctx = g_main_context_new();
   g_main_context_push_thread_default(m_ctx);
-  m_loop = g_main_loop_new(m_ctx, FALSE);
 
   GSource *src = g_idle_source_new();
   g_source_set_callback(src, &PortalShortcutManager::onStartRequested, this,
@@ -189,11 +205,10 @@ void PortalShortcutManager::workerMain() {
 
   cleanupOnWorker();
 
+  // Let pending async callbacks (Session.Close…) run before leaving.
+  while (g_main_context_iteration(m_ctx, FALSE)) {
+  }
   g_main_context_pop_thread_default(m_ctx);
-  g_main_loop_unref(m_loop);
-  m_loop = nullptr;
-  g_main_context_unref(m_ctx);
-  m_ctx = nullptr;
 }
 
 gboolean PortalShortcutManager::onStartRequested(gpointer user_data) {
@@ -440,8 +455,7 @@ void PortalShortcutManager::onBindShortcutsResponse(
 
 void PortalShortcutManager::onListShortcutsReply(GObject *source,
                                                  GAsyncResult *res,
-                                                 gpointer user_data) {
-  auto *self = static_cast<PortalShortcutManager *>(user_data);
+                                                 gpointer /*user_data*/) {
   GError *err = nullptr;
   GVariant *reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source),
                                                   res, &err);
@@ -515,52 +529,8 @@ void PortalShortcutManager::onListShortcutsResponse(
   if (nWithTrigger == 0) {
     std::cerr << "[portal] The compositor has not mapped any key to our "
                  "shortcuts yet." << std::endl;
-    std::cerr << "[portal] On Hyprland, add one 'bind = ..., global, ...' "
-                 "entry per shortcut to your hyprland.conf:" << std::endl;
-
-    std::vector<ShortcutDescriptor> snap;
-    {
-      std::lock_guard<std::mutex> lock(self->m_mutex);
-      for (const auto &[k, v] : self->m_shortcuts)
-        snap.push_back(v);
-    }
-    for (const auto &d : snap) {
-      // Translate our "Ctrl+Alt+K" into Hyprland's bind syntax
-      // "CTRL ALT, K" (mods separated by spaces, then ", <key>").
-      std::string mods;
-      std::string key;
-      std::string cur;
-      auto flush = [&]() {
-        if (cur.empty())
-          return;
-        std::string up = cur;
-        std::transform(up.begin(), up.end(), up.begin(),
-                       [](unsigned char c) { return std::toupper(c); });
-        if (up == "CTRL" || up == "CONTROL" || up == "ALT" ||
-            up == "SHIFT" || up == "SUPER" || up == "META" || up == "WIN") {
-          if (!mods.empty())
-            mods += ' ';
-          mods += (up == "WIN" || up == "META") ? "SUPER" : up;
-        } else {
-          key = cur;
-        }
-        cur.clear();
-      };
-      for (char c : d.defaultAccel) {
-        if (c == '+')
-          flush();
-        else
-          cur.push_back(c);
-      }
-      flush();
-      // NOTE: leading ':' is mandatory — xdg-desktop-portal registers
-      // non-flatpak apps with an EMPTY app_id, so the arg must start
-      // with a colon (NOT 'simpleautoframer:<id>').
-      std::cerr << "    bind = " << (mods.empty() ? "" : mods) << ", "
-                << (key.empty() ? "<key>" : key)
-                << ", global, :" << d.id << std::endl;
-    }
-    std::cerr << "[portal] After editing hyprland.conf: hyprctl reload"
+    std::cerr << "[portal] On Hyprland the binds are written to your config "
+                 "automatically (menu: \"Sync shortcuts to Hyprland config\")."
               << std::endl;
     std::cerr << "[portal] If a shortcut still doesn't fire, clear the "
                  "portal's cached sessions:" << std::endl;

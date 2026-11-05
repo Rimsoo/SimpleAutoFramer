@@ -1,6 +1,7 @@
 #pragma once
 
 #include <config.h>
+#include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -26,17 +27,18 @@ public:
 
     // Conversion JSON
     nlohmann::json toJson() const;
-    static Profile *fromJson(const std::string &name, const nlohmann::json &j);
+    static std::unique_ptr<Profile> fromJson(const std::string &name,
+                                             const nlohmann::json &j);
+    // Clamp values loaded from disk into the ranges the app supports.
+    void sanitize();
   };
   // Gestion des profils
   void createProfile(const std::string &name = "default");
   void deleteProfile(const std::string &name);
   void switchProfile(const std::string &name);
   std::vector<Profile> getProfileList() const;
-  std::string getCurrentProfileName() const { return currentProfile->name; }
-  bool profileExists(const std::string &name) {
-    return findProfile(name) != savedProfiles.end();
-  }
+  std::string getCurrentProfileName() const;
+  bool profileExists(const std::string &name);
 
   // Getters/Setters pour la profil courante
   // Getters
@@ -66,19 +68,23 @@ public:
   void loadProfilesFile();
   void saveProfileFiles();
   void setShowQuitMessage(bool value);
-  bool isShowQuitMessage() const { return showQuitMessage; }
+  bool isShowQuitMessage() const;
+  // Rewrite the compositor config so Hyprland routes our global shortcuts.
+  void setHyprlandSync(bool value);
+  bool isHyprlandSync() const;
 
 private:
   mutable std::mutex mutex_;
   std::string profileFilename;
   Profile *currentProfile = nullptr;
-  std::vector<Profile *> savedProfiles;
+  std::vector<std::unique_ptr<Profile>> savedProfiles;
   bool showQuitMessage = true;
+  bool hyprlandSync = true;
 
   // Helpers
-  void applyProfile(const Profile &profile);
   void internalSave();
   void create(const std::string &name);
 
-  std::vector<Profile *>::iterator findProfile(const std::string &name);
+  std::vector<std::unique_ptr<Profile>>::iterator
+  findProfile(const std::string &name);
 };

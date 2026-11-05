@@ -3,12 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
-option(USE_CUDA              "Enable CUDA acceleration (needs CUDA toolkit)"       OFF)
+option(USE_CUDA              "Use OpenCV CUDA modules for the DNN path if present" OFF)
 option(INSTALL_MODE          "Build paths for system install (/usr/share/...)"    OFF)
-
-# Legacy hotkey backends. Superseded by src/ui/shortcuts/*. Kept OFF by
-# default; enable only if you need to compile the old listeners for reference.
-option(USE_LEGACY_HOTKEYS    "Compile the legacy X11/Wayland hotkey listeners"   OFF)
+option(INSTALL_UNINSTALLER   "Install the simpleautoframer-uninstall helper (not for distro packages)" ON)
 
 # Shortcut abstraction (src/ui/shortcuts/*) — picks X11 or xdg-desktop-portal
 # at runtime based on XDG_SESSION_TYPE.
@@ -21,16 +18,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
 endif()
 
-# ---------------------------------------------------------------------------
-# Project declaration (CUDA must be declared *before* project() if used)
-# ---------------------------------------------------------------------------
-if(USE_CUDA)
-    project(simpleautoframer VERSION 0.2.0 LANGUAGES CXX CUDA)
-    set(CMAKE_CUDA_STANDARD 17)
-    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-else()
-    project(simpleautoframer VERSION 0.2.0 LANGUAGES CXX)
-endif()
+project(simpleautoframer VERSION 0.3.0 LANGUAGES CXX)
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,16 +41,17 @@ elseif(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Windows" OR MSYS OR MINGW)
 endif()
 
 # ---------------------------------------------------------------------------
-# Legacy compile-time flags (kept for the legacy listeners; off by default)
-# ---------------------------------------------------------------------------
-if(USE_LEGACY_HOTKEYS)
-    add_definitions(-DUSE_X11 -DUSE_WAYLAND)
-endif()
-
-# ---------------------------------------------------------------------------
 # External packages — common
 # ---------------------------------------------------------------------------
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio objdetect dnn)
+# HINTS beat the PATH-derived prefixes, so a stale /usr/local OpenCV build
+# (e.g. one pinned to an old CUDA version) can't shadow the distro package.
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio objdetect dnn
+    HINTS /usr/lib/cmake/opencv5 /usr/lib/cmake/opencv4
+          /usr/lib/x86_64-linux-gnu/cmake/opencv4
+          /usr/lib/aarch64-linux-gnu/cmake/opencv4)
+message(STATUS "Using OpenCV ${OpenCV_VERSION} from ${OpenCV_DIR}")
+# Each find_package(OpenCV) call below overwrites OpenCV_LIBS, so accumulate.
+set(SAF_OPENCV_LIBS ${OpenCV_LIBS})
 
 # OpenCV 5 relocated the classic Haar/LBP cv::CascadeClassifier from the core
 # "objdetect" module into the contrib "xobjdetect" module, so it must be linked
@@ -69,21 +59,20 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio objdetect
 # needed.
 if(OpenCV_VERSION_MAJOR GREATER_EQUAL 5)
     find_package(OpenCV REQUIRED COMPONENTS xobjdetect)
+    list(APPEND SAF_OPENCV_LIBS ${OpenCV_LIBS})
 endif()
 
-# Core.cpp uses cv::cuda::resize / cv::cuda::cvtColor on the DNN path. Until
-# Core is refactored to guard those calls behind #ifdef USE_CUDA, we link
-# against the OpenCV CUDA modules whenever they are available.
-find_package(OpenCV OPTIONAL_COMPONENTS cudaimgproc cudawarping)
-if(OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND)
-    set(SAF_HAS_OPENCV_CUDA TRUE)
-    message(STATUS "OpenCV CUDA modules found (cudaimgproc + cudawarping).")
-else()
-    set(SAF_HAS_OPENCV_CUDA FALSE)
-    message(WARNING
-        "OpenCV CUDA modules not found. The DNN detection path in Core.cpp "
-        "will fail to link until Core.cpp is refactored to guard cv::cuda "
-        "calls behind #ifdef USE_CUDA.")
+# Optional GPU path for the DNN detector (Core.cpp guards it with
+# SAF_HAS_OPENCV_CUDA). Off by default so packages build against any OpenCV.
+set(SAF_HAS_OPENCV_CUDA FALSE)
+if(USE_CUDA)
+    find_package(OpenCV OPTIONAL_COMPONENTS cudaimgproc cudawarping)
+    if(OpenCV_cudaimgproc_FOUND AND OpenCV_cudawarping_FOUND)
+        set(SAF_HAS_OPENCV_CUDA TRUE)
+        message(STATUS "OpenCV CUDA modules found (cudaimgproc + cudawarping).")
+    else()
+        message(WARNING "USE_CUDA=ON but OpenCV has no CUDA modules; using CPU.")
+    endif()
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -131,10 +120,6 @@ if(IS_LINUX)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/gtk/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/camera/v4l2/*.cpp"
     )
-    # Drop the legacy hotkey listeners unless explicitly requested.
-    if(NOT USE_LEGACY_HOTKEYS)
-        list(FILTER LINUX_SOURCES EXCLUDE REGEX "(X11|Wayland)HotkeyListener\\.cpp$")
-    endif()
     list(APPEND PROJECT_SOURCES ${LINUX_SOURCES})
 
     # SAF shortcut adapter — always compiled on Linux.
@@ -180,7 +165,7 @@ target_include_directories(simpleautoframer PUBLIC
 
 # ---- Common link deps
 target_link_libraries(simpleautoframer PRIVATE
-    ${OpenCV_LIBS}
+    ${SAF_OPENCV_LIBS}
     nlohmann_json::nlohmann_json
     Threads::Threads
 )
@@ -230,6 +215,7 @@ endif()
 # ---------------------------------------------------------------------------
 # Generated config.h
 # ---------------------------------------------------------------------------
+set(SAF_INSTALL_DATA_DIR "${CMAKE_INSTALL_FULL_DATADIR}/simpleautoframer")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in
                ${CMAKE_BINARY_DIR}/config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR})
@@ -270,8 +256,6 @@ endforeach()
 # ---------------------------------------------------------------------------
 # Install rules (Linux) — relative paths so DESTDIR works for packaging
 # ---------------------------------------------------------------------------
-include(GNUInstallDirs)
-
 if(IS_LINUX)
     install(TARGETS simpleautoframer
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -292,7 +276,7 @@ if(IS_LINUX)
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/64x64/apps)
 
     # Uninstall helper (non-packaged installs only)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall")
+    if(INSTALL_UNINSTALLER)
         install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/data/simpleautoframer-uninstall
             DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()

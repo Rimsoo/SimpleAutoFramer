@@ -1,4 +1,5 @@
 // CameraFactory.h
+#pragma once
 #include "ICamera.h"
 #ifdef IS_LINUX
 #include "v4l2/LinuxCamera.h"

@@ -1,26 +1,23 @@
 // src/ui/shortcuts/HyprlandBindsSync.h
 //
-// Hyprland-specific convenience: write the `bind = ..., global, :<id>` lines
-// that route physical keys to our xdg-desktop-portal shortcuts directly
-// into the user's hyprland.conf, then run `hyprctl reload`.
+// Hyprland-specific convenience: make the compositor route our global
+// shortcuts to the xdg-desktop-portal session, then reload Hyprland.
 //
-// Why: xdg-desktop-portal-hyprland accepts BindShortcuts and remembers the
-// shortcut ids, but the compositor only forwards a physical key to the
-// portal once a matching `bind = ..., global, <app_id>:<shortcut_id>`
-// entry is present in hyprland.conf. Without that line, shortcut changes
-// only take effect after the user manually edits the config and reloads.
-// This helper closes the loop: on every portal session commit, the managed
-// block is rewritten atomically and hyprctl reload makes it live.
+// Why: xdg-desktop-portal-hyprland accepts BindShortcuts, but the compositor
+// only forwards a physical key once a matching `global` bind exists in its
+// config. The leading ':' in the bind argument is mandatory: the portal
+// registers non-flatpak apps with an EMPTY app_id.
 //
-// The block is delimited by marker comments so we never touch unrelated
-// lines:
+// Two config flavours are supported:
+//   * hyprland.lua (Hyprland >= 0.55): the binds go into a generated
+//     simpleautoframer.lua next to it, loaded by a one-line managed block:
+//         hl.bind("CTRL + ALT + 1", hl.dsp.global(":ctrl_alt_1"))
+//   * hyprland.conf (legacy hyprlang): a managed block holding
+//         bind = CTRL ALT, 1, global, :ctrl_alt_1
 //
-//     # >>> simpleautoframer: managed block — do not edit by hand <<<
-//     bind = CTRL ALT, 1, global, :ctrl_alt_1
-//     # <<< simpleautoframer: end managed block >>>
-//
-// No-ops (returns false without touching anything) when the environment
-// doesn't look like Hyprland, or when no hyprland.conf can be located.
+// Managed blocks are delimited by marker comments so unrelated lines are
+// never touched. Symlinked configs (dotfile managers) are written through.
+// The feature is controlled by the `hyprland_sync` setting.
 
 #pragma once
 
@@ -30,6 +27,14 @@
 
 namespace saf {
 
+/// True when running inside a Hyprland session.
+bool isHyprlandSession();
+
+/// Write the binds for `shortcuts` and reload Hyprland. No-op (returns
+/// false) outside Hyprland or when no config file can be found.
 bool syncHyprlandBinds(const std::vector<ShortcutDescriptor> &shortcuts);
+
+/// Remove everything syncHyprlandBinds() added, then reload Hyprland.
+bool removeHyprlandBinds();
 
 } // namespace saf

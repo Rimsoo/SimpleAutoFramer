@@ -1,4 +1,5 @@
 // LinuxCamera.h
+#pragma once
 #include "ICamera.h"
 #include "V4l2Output.h"
 #include <opencv2/opencv.hpp>
@@ -18,5 +19,5 @@ public:
 
 private:
   V4l2Output *v4l2Output;
-  // cv::VideoCapture physicalCamera;
+  cv::Mat yuv_; // reused I420 conversion buffer
 };
