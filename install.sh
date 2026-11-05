@@ -142,11 +142,6 @@ echo "==> Configuring CMake (Release)…"
 mkdir -p "$BUILD_DIR"
 pushd "$BUILD_DIR" >/dev/null
 
-# Prefer the distro OpenCV over any custom /usr/local build (see build_and_run.sh).
-OPENCV_DIR_ARG=()
-if [ -z "${OpenCV_DIR:-}" ] && [ -f /usr/lib/cmake/opencv4/OpenCVConfig.cmake ]; then
-    OPENCV_DIR_ARG=(-DOpenCV_DIR=/usr/lib/cmake/opencv4)
-fi
 
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
@@ -154,8 +149,7 @@ cmake .. \
     -DINSTALL_MODE=ON \
     -DUSE_X11_SHORTCUTS=ON \
     -DUSE_PORTAL_SHORTCUTS=ON \
-    -DUSE_CUDA=OFF \
-    "${OPENCV_DIR_ARG[@]}"
+    -DUSE_CUDA=OFF
 
 echo "==> Building…"
 cmake --build . --parallel "$(nproc)"

@@ -1,36 +1,53 @@
-# SimpleAutoFramer C++
+# SimpleAutoFramer
 
 > [!NOTE]
 > Main repository: [Forgejo](https://forgejo.aaaoz.fr/Rimso/SimpleAutoFramer) · Mirror: [GitHub](https://github.com/Rimsoo/SimpleAutoFramer) (kept in sync automatically).
 > Issues and feedback are welcome on GitHub.
 
+Open-source auto-framing for webcams (an alternative to NVIDIA Broadcast's
+auto-frame). SimpleAutoFramer reads your webcam, tracks your face, crops and
+zooms around it smoothly, and feeds the result to a **virtual camera**
+(`v4l2loopback`) that any app can use: browsers, Zoom, Teams, Discord, OBS…
+
 ## Installation
 
-### Prerequisites
-
-- OpenCV
-- V4l2loopback
-- CMake
-- Make
-- Apindicator3
-- Gtk3
-- ...
-
-Check the [install.sh](install.sh) script for more details.
-
-### Instructions
-
-Tested on Ubuntu 24.04 Gnome only.
-
-## Install
+### Arch Linux
 
 ```bash
-git clone https://github.com/Rimsoo/SimpleAutoFramer.git
-cd SimpleAutoFrame
-chmod +x install.sh
-sudo ./install.sh
-simpleautoframe
+cd packaging/arch
+makepkg -si
 ```
+
+(The same `PKGBUILD` is meant for the AUR as `simpleautoframer-git`.)
+
+### Other distributions (Ubuntu/Debian, Fedora)
+
+```bash
+git clone --recursive https://forgejo.aaaoz.fr/Rimso/SimpleAutoFramer.git
+cd SimpleAutoFramer
+./install.sh
+```
+
+`install.sh` installs the dependencies, configures `v4l2loopback` to load at
+boot as `/dev/video20` ("AutoFrameCam"), builds, and installs to `/usr`.
+Run `./install.sh --help` for options. Uninstall with
+`sudo simpleautoframer-uninstall`.
+
+### Dependencies
+
+CMake ≥ 3.20, a C++20 compiler, OpenCV 4 or 5 (with `xobjdetect` on 5),
+gtkmm-3.0, ayatana-appindicator3, nlohmann-json, libX11/libXi, GLib/GIO,
+and the `v4l2loopback` kernel module.
+
+### Development build
+
+```bash
+./build_and_run.sh          # Debug build in ./build, then runs it
+```
+
+A dev build reads its data files and its config
+(`simpleautoframer.config.json`) next to the binary. An installed build uses
+`/usr/share/simpleautoframer` and `~/.config/simpleautoframer/`.
 
 ## Usage
 
@@ -38,70 +55,58 @@ simpleautoframe
 simpleautoframer
 ```
 
+Then select **AutoFrameCam** as the camera in your video app.
+
+- Settings are grouped in **profiles**; sliders apply live, **Apply** saves.
+- Closing the window keeps the app running in the tray. Launching
+  `simpleautoframer` again brings the window back (handy when your desktop has
+  no tray), and the tray menu's **Quit** exits.
+- The *Haar Cascade* detector works everywhere. The *DNN* detector needs
+  OpenCV 4: OpenCV 5 dropped the Caffe importer, so with OpenCV 5 the app
+  falls back to Haar automatically.
+
+If the virtual camera is missing:
+
+```bash
+sudo modprobe v4l2loopback devices=1 video_nr=20 card_label=AutoFrameCam exclusive_caps=1
+```
+
 ### Shortcuts
 
-Click the keyboard icon in the *Shortcut* field of the UI (or double-click
-the field) to capture a combination — the app will listen for the next
-key press and fill the field for you. Supported modifiers: Ctrl, Alt,
-Shift, Super. Special keys such as `KP_Add`, `KP_Subtract`, `F5`, … work
-too. The raccourci format can still be typed by hand (e.g. `Ctrl+Alt+K`).
+Each profile can have a global shortcut that switches to it. Click the
+keyboard icon in the *Shortcut* field (or double-click it) and press the
+combination; modifiers Ctrl, Alt, Shift and Super are supported, as well as
+keys like `KP_Add` or `F5`.
 
-### Wayland / Hyprland — extra step required
+- **X11**: works out of the box (`XGrabKey`).
+- **KDE / GNOME 47+ (Wayland)**: the shortcuts go through
+  `xdg-desktop-portal`; accept the prompt on first use.
+- **Hyprland**: the compositor only forwards keys that have a `global` bind,
+  so SimpleAutoFramer writes those binds for you and runs `hyprctl reload`:
+  - `hyprland.lua` (Hyprland ≥ 0.55): the binds go to
+    `~/.config/hypr/simpleautoframer.lua`, loaded by a small managed block
+    appended to `hyprland.lua`.
+  - `hyprland.conf`: a managed block of `bind = …, global, :<id>` lines.
 
-Under Wayland SimpleAutoFramer uses `org.freedesktop.portal.GlobalShortcuts`
-via `xdg-desktop-portal`. KDE and GNOME 47+ bind the keys automatically.
-Under Hyprland you must also add one entry per shortcut to your
-`hyprland.conf`, because the compositor only forwards keys it has been
-explicitly asked to. Launch `simpleautoframer` once from a terminal: it
-prints the exact lines to copy, e.g.:
+  Symlinked configs (dotfile managers) are written through. To manage the
+  binds yourself, untick **Sync shortcuts to Hyprland config** in the menu
+  (the managed block is then removed) and add for example:
 
-```
-bind = CTRL ALT, 1, global, :ctrl_alt_1
-bind = CTRL ALT, 2, global, :ctrl_alt_2
-```
+  ```lua
+  hl.bind("CTRL + ALT + 1", hl.dsp.global(":ctrl_alt_1"))
+  ```
 
-**The leading `:` is mandatory** — xdg-desktop-portal registers non-flatpak
-apps with an *empty* app_id, so the bind's third argument must literally
-start with a colon (not `simpleautoframer:<id>`).
+  The leading `:` is required: the portal registers non-flatpak apps with an
+  empty app id. The ids are printed in the terminal when the app starts.
+  If a shortcut still doesn't fire, restart the portal:
+  `systemctl --user restart xdg-desktop-portal-hyprland`.
 
-After editing the config, reload:
+## CI
 
-```bash
-hyprctl reload
-```
-
-If a shortcut still doesn't fire, `xdg-desktop-portal-hyprland` is
-probably routing to a stale session from a previous run. Clear the
-portal's cache:
-
-```bash
-systemctl --user restart xdg-desktop-portal-hyprland
-```
-
-Make sure both services are running:
-
-```bash
-systemctl --user status xdg-desktop-portal xdg-desktop-portal-hyprland
-```
-
-You can inspect what the compositor knows via:
-
-```bash
-hyprctl globalshortcuts
-```
-
-Live shortcuts should show up with `app_id:` prefix matching the binds
-(empty app_id → `:ctrl_alt_1 -> SimpleAutoFramer (…)`).
-
-### Under X11
-
-No extra step. The app uses `XGrabKey` directly.
-
-## Unsintall
-
-```bash
-sudo simpleautoframe-uninstall
-```
+Builds run on Forgejo Actions (`.forgejo/workflows/build.yml`). Forgejo does
+not provide hosted machines, so a **runner must be registered**; without one
+the jobs wait forever with *"No matching online runner"*. See
+[docs/CI.md](docs/CI.md).
 
 ## TODO
 
@@ -111,4 +116,5 @@ sudo simpleautoframe-uninstall
 - [x] GPU support
 - [x] Configuration file
 - [x] Config shortcuts
+- [ ] Modern DNN detector for OpenCV 5 (YuNet)
 - [ ] Add filters

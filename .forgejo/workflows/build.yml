@@ -1,0 +1,78 @@
+# Forgejo Actions — needs a self-hosted forgejo-runner (see README, "CI").
+#
+# `runs-on: docker` matches the default label of a forgejo-runner registered
+# with `--labels docker:docker://node:20-bookworm`. Each job then runs inside
+# its own distro container, so the runner host only needs Docker.
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ubuntu:
+    name: Ubuntu 24.04 (OpenCV 4)
+    runs-on: docker
+    container:
+      image: ubuntu:24.04
+    steps:
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git nodejs \
+            build-essential cmake pkg-config ninja-build \
+            libopencv-dev nlohmann-json3-dev \
+            libgtkmm-3.0-dev libayatana-appindicator3-dev \
+            libx11-dev libxi-dev libglib2.0-dev
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DINSTALL_MODE=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Install (staging)
+        run: |
+          DESTDIR="$PWD/stage" cmake --install build
+          test -x stage/usr/bin/simpleautoframer
+          stage/usr/bin/simpleautoframer --version
+
+  arch:
+    name: Arch Linux (OpenCV 5) + PKGBUILD lint
+    runs-on: docker
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git nodejs cmake ninja pkgconf \
+            opencv gtkmm3 libayatana-appindicator \
+            nlohmann-json libx11 libxi glib2 namcap
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure + build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ./build/simpleautoframer --version
+
+      - name: Lint PKGBUILD
+        run: namcap packaging/arch/PKGBUILD
